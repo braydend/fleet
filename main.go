@@ -51,7 +51,10 @@ func run() error {
 	}
 
 	g := git.New()
-	tm := tmux.New()
+	// Run on fleet's own tmux server (default socket "fleet") so fleet is fully
+	// isolated from the user's personal tmux — see config.TmuxSocket. An empty
+	// socket falls back to the default tmux server.
+	tm := tmux.NewWithSocket(cfg.TmuxSocket)
 	fg := forge.New()
 	mgr := session.NewManager(cfg, tm, g, fg, time.Now)
 

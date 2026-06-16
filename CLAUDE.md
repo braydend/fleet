@@ -32,6 +32,7 @@ leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
   ```yaml
   scan_root: /home/you/code
   worktree_base_dir: /home/you/.local/share/fleet/worktrees
+  tmux_socket: fleet   # dedicated tmux server; "" = use the default tmux server
   ```
 
 ## Tech stack
@@ -43,12 +44,19 @@ leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
 
 ## Core design decisions
 
-- **Session model:** tmux-backed. All instances share one tmux session
-  (`fleet-workspace`); each instance is a *window* named
+- **Session model:** tmux-backed. fleet runs on its own **dedicated tmux server**
+  (`tmux -L fleet`, configurable via `tmux_socket`) so it is fully isolated from
+  the user's personal tmux — fleet's options/keybindings/`kill-session` can't
+  touch the default server, and vice versa (this isolation is what fixed #5,
+  where the test suite's `kill-session fleet-workspace` on the shared default
+  server was destroying live sessions). On that server, all instances share one
+  session (`fleet-workspace`); each instance is a *window* named
   `fleet-<project>-<session>` running `claude` in its worktree. Windows act as
   tabs — switch with Alt-1..9 / Alt-←/→ while attached. Per-session activity
   (working / waiting / idle / exited) is derived from tmux's window-activity
   timestamp plus a best-effort capture-pane prompt match (`internal/activity`).
+  Tests and the integration smoke test each run on their own private socket
+  (`NewWithSocket`) so they never touch a real fleet server.
 - **Project discovery:** scan a configured root directory for git repos.
 - **Worktree location:** central dir per project —
   `<worktreeBaseDir>/<project>/<session>`.
