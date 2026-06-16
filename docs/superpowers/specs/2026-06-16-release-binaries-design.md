@@ -105,11 +105,16 @@ workflow runs — GitHub's recursion guard):
 - Job `release-please`: runs `googleapis/release-please-action@v4`; exposes
   outputs `release_created` and `tag_name`.
 - Job `goreleaser`: `needs: release-please`,
-  `if: ${{ needs.release-please.outputs.release_created }}`. Steps:
+  `if: ${{ needs.release-please.outputs.release_created == 'true' }}` (explicit
+  equality avoids the non-empty-string-is-truthy pitfall). Steps:
   - `actions/checkout@v4` with `fetch-depth: 0` and
     `ref: ${{ needs.release-please.outputs.tag_name }}`,
-  - `actions/setup-go@v5` with `go-version: '1.26'`,
+  - `actions/setup-go@v5` with `go-version-file: go.mod` (reads the version
+    from `go.mod`, avoiding drift),
   - `goreleaser/goreleaser-action@v6` running `release --clean`.
+- A workflow-level `concurrency` group (`release-${{ github.ref }}`,
+  `cancel-in-progress: false`) prevents two racing releases from
+  double-uploading assets.
 - Auth: built-in `GITHUB_TOKEN` only — no repository secrets to configure.
 
 ### 5. README — "Install / Try it"
