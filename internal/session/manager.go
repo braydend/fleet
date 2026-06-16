@@ -1,7 +1,6 @@
 package session
 
 import (
-	"os/exec"
 	"time"
 
 	"github.com/bray/fleet/internal/config"
@@ -10,22 +9,19 @@ import (
 	"github.com/bray/fleet/internal/meta"
 	"github.com/bray/fleet/internal/naming"
 	"github.com/bray/fleet/internal/projects"
+	"github.com/bray/fleet/internal/tmux"
 )
 
-// claudeCommand is the command launched inside each session's tmux session.
+// claudeCommand is the command launched inside each session's tmux window.
 const claudeCommand = "claude"
 
-// tmuxPort is the subset of tmux.Tmux the manager uses for lifecycle ops.
-// AttachCmd is exposed separately so tests can supply a fake without os/exec.
+// tmuxPort is the subset of the tmux adapter the manager uses for window-based
+// session lifecycle.
 type tmuxPort interface {
-	Create(name, workdir, command string) error
-	Kill(name string) error
-	Has(name string) bool
-}
-
-// attacher can produce the attach command; satisfied by *tmux.CLI.
-type attacher interface {
-	AttachCmd(name string) *exec.Cmd
+	CreateWindow(name, workdir, command string) (int, error)
+	KillWindow(target string) error
+	RespawnWindow(target, workdir, command string) error
+	LookupWindow(name string) (tmux.Window, bool)
 }
 
 // Manager creates and tears down sessions by composing git, meta and tmux.
@@ -46,73 +42,61 @@ func NewManager(cfg config.Config, t tmuxPort, g git.Git, f forge.PRer, clock fu
 	return &Manager{cfg: cfg, tmux: t, git: g, forge: f, clock: clock}
 }
 
-// Create makes the worktree, writes meta, and launches the tmux session.
+// Create makes the worktree, writes meta, and launches the session's window in
+// the shared workspace.
 func (m *Manager) Create(p projects.Project, name, branch, base string) (Session, error) {
 	wt := naming.WorktreePath(m.cfg.WorktreeBaseDir, p.Name, name)
 	if err := m.git.AddWorktree(p.Path, wt, branch, base); err != nil {
 		return Session{}, err
 	}
-	// Keep fleet's own .fleet/ bookkeeping out of git status and out of the
-	// user's commits.
 	if err := m.git.Ignore(wt, ".fleet/"); err != nil {
 		return Session{}, err
 	}
 	now := m.clock()
 	md := meta.Meta{
-		Project:   p.Name,
-		Session:   name,
-		Branch:    branch,
-		Base:      base,
-		RepoPath:  p.Path,
-		CreatedAt: now,
+		Project: p.Name, Session: name, Branch: branch, Base: base,
+		RepoPath: p.Path, CreatedAt: now,
 	}
 	if err := meta.Write(wt, md); err != nil {
 		return Session{}, err
 	}
-	tname := naming.TmuxName(p.Name, name)
-	if err := m.tmux.Create(tname, wt, claudeCommand); err != nil {
+	wname := naming.TmuxName(p.Name, name)
+	idx, err := m.tmux.CreateWindow(wname, wt, claudeCommand)
+	if err != nil {
 		return Session{}, err
 	}
 	return Session{
-		Project:      p.Name,
-		Name:         name,
-		Branch:       branch,
-		Base:         base,
-		RepoPath:     p.Path,
-		WorktreePath: wt,
-		TmuxName:     tname,
-		CreatedAt:    now,
-		Alive:        true,
+		Project: p.Name, Name: name, Branch: branch, Base: base,
+		RepoPath: p.Path, WorktreePath: wt, TmuxName: wname,
+		CreatedAt: now, Alive: true, WindowIndex: idx,
 	}, nil
 }
 
-// Kill terminates the tmux session (ignoring "no such session").
-func (m *Manager) Kill(s Session) error {
-	return m.tmux.Kill(s.TmuxName)
-}
-
-// EnsureRunning makes sure the session's tmux session exists, recreating it (and
-// relaunching claude in the existing worktree) if it has exited — e.g. because
-// claude was quit with Ctrl-D. It is a no-op when the session is already alive,
-// so it is safe to call right before attaching.
+// EnsureRunning makes sure the session has a live window, creating it if it is
+// missing (e.g. a pre-upgrade session) or respawning it if its process exited.
+// Safe to call right before attaching.
 func (m *Manager) EnsureRunning(s Session) error {
-	if m.tmux.Has(s.TmuxName) {
-		return nil
+	w, ok := m.tmux.LookupWindow(s.TmuxName)
+	if !ok {
+		_, err := m.tmux.CreateWindow(s.TmuxName, s.WorktreePath, claudeCommand)
+		return err
 	}
-	return m.tmux.Create(s.TmuxName, s.WorktreePath, claudeCommand)
+	if w.Dead {
+		return m.tmux.RespawnWindow(naming.WindowTarget(s.Project, s.Name), s.WorktreePath, claudeCommand)
+	}
+	return nil
 }
 
 // Leave ends the running Claude instance but keeps the worktree and branch.
 func (m *Manager) Leave(s Session) error {
-	_ = m.tmux.Kill(s.TmuxName) // ignore: session may already be gone
+	_ = m.tmux.KillWindow(naming.WindowTarget(s.Project, s.Name)) // ignore: may already be gone
 	return nil
 }
 
-// Delete kills the tmux session, removes the worktree, and optionally deletes
-// the branch. The worktree removal is forced because the caller has already
-// confirmed any dirty/unpushed state.
+// Delete kills the session's window, removes the worktree, and optionally
+// deletes the branch.
 func (m *Manager) Delete(s Session, deleteBranch bool) error {
-	_ = m.tmux.Kill(s.TmuxName)
+	_ = m.tmux.KillWindow(naming.WindowTarget(s.Project, s.Name))
 	if err := m.git.RemoveWorktree(s.RepoPath, s.WorktreePath, true); err != nil {
 		return err
 	}
@@ -134,13 +118,4 @@ func (m *Manager) PushPR(s Session) error {
 		return m.forge.OpenPR(s.WorktreePath)
 	}
 	return nil
-}
-
-// AttachCmd returns the command to attach to the session's tmux, for use with
-// tea.ExecProcess. Requires the tmux port to also implement attacher.
-func (m *Manager) AttachCmd(s Session) *exec.Cmd {
-	if a, ok := m.tmux.(attacher); ok {
-		return a.AttachCmd(s.TmuxName)
-	}
-	return exec.Command("tmux", "attach", "-t", s.TmuxName)
 }
