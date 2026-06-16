@@ -69,19 +69,18 @@ func TestSmokeRealAdapters(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("write meta: %v", err)
 	}
-	tname := naming.TmuxName("myrepo", "smoke")
-	_ = tm.Kill(tname)
-	if err := tm.Create(tname, wt, "sleep 60"); err != nil {
-		t.Fatalf("tmux create: %v", err)
+	_ = tm.KillWorkspace()
+	if _, err := tm.CreateWindow(naming.TmuxName("myrepo", "smoke"), wt, "sleep 60"); err != nil {
+		t.Fatalf("tmux create window: %v", err)
 	}
-	t.Cleanup(func() { _ = tm.Kill(tname) })
+	t.Cleanup(func() { _ = tm.KillWorkspace() })
 
 	// Dirty the worktree so we can verify git status flows through.
 	if err := os.WriteFile(filepath.Join(wt, "scratch.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	sessions, err := Build(cfg, tm, g)
+	sessions, err := Build(cfg, tm, g, time.Now)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -97,10 +96,10 @@ func TestSmokeRealAdapters(t *testing.T) {
 	}
 
 	// Kill tmux -> next Build should show it exited.
-	if err := tm.Kill(tname); err != nil {
-		t.Fatalf("kill: %v", err)
+	if err := tm.KillWindow(naming.WindowTarget("myrepo", "smoke")); err != nil {
+		t.Fatalf("kill window: %v", err)
 	}
-	sessions, err = Build(cfg, tm, g)
+	sessions, err = Build(cfg, tm, g, time.Now)
 	if err != nil {
 		t.Fatalf("build after kill: %v", err)
 	}
@@ -112,7 +111,7 @@ func TestSmokeRealAdapters(t *testing.T) {
 	if err := g.RemoveWorktree(repo, wt, true); err != nil {
 		t.Fatalf("remove worktree: %v", err)
 	}
-	sessions, err = Build(cfg, tm, g)
+	sessions, err = Build(cfg, tm, g, time.Now)
 	if err != nil {
 		t.Fatalf("build after remove: %v", err)
 	}
