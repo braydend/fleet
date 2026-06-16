@@ -57,7 +57,7 @@ func run() error {
 
 	actions := ui.Actions{
 		Refresh: func() ([]session.Session, error) {
-			return refresher.Build(cfg, tm, g)
+			return refresher.Build(cfg, tm, g, time.Now)
 		},
 		Projects: func() ([]projects.Project, error) {
 			return projects.Scan(cfg.ScanRoot, g)
@@ -70,17 +70,18 @@ func run() error {
 		Leave:  mgr.Leave,
 		PushPR: mgr.PushPR,
 		Attach: func(s session.Session) tea.Cmd {
-			// If the session has exited (e.g. claude was quit with Ctrl-D),
-			// restart it before attaching so it can still be opened.
 			if err := mgr.EnsureRunning(s); err != nil {
 				return func() tea.Msg { return ui.ErrorMsgFor(err) }
 			}
-			// Show a small status bar inside the session with navigation help.
-			// Best-effort: a decoration failure must not block attaching.
-			_ = tm.Decorate(s.TmuxName, s.Project+"/"+s.Name)
-			return tea.ExecProcess(mgr.AttachCmd(s), func(err error) tea.Msg {
-				// After detaching, refresh the list.
-				ss, rerr := refresher.Build(cfg, tm, g)
+			// Configure the tab strip + switch keys (best-effort).
+			_ = tm.ConfigureTabs()
+			// Resolve the current index by name (it may have been renumbered) and
+			// select it before attaching.
+			if w, ok := tm.LookupWindow(s.TmuxName); ok {
+				_ = tm.SelectWindow(w.Index)
+			}
+			return tea.ExecProcess(tm.AttachWorkspaceCmd(), func(err error) tea.Msg {
+				ss, rerr := refresher.Build(cfg, tm, g, time.Now)
 				if rerr != nil {
 					return ui.ErrorMsgFor(rerr)
 				}
