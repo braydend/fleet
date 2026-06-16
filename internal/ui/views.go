@@ -64,6 +64,9 @@ func (m Model) viewDashboard() string {
 		b.WriteString(dimStyle.Render("no sessions. press n to create one.") + "\n")
 	}
 
+	// Sessions arrive already ordered by project then name (the refresher reads
+	// dirs in os.ReadDir's sorted order), so a contiguous-run check is enough to
+	// print each project header exactly once.
 	lastProject := ""
 	for i, s := range m.sessions {
 		if s.Project != lastProject {
@@ -72,6 +75,8 @@ func (m Model) viewDashboard() string {
 		}
 
 		// Tab number: the window index, or "-" when there is no live window.
+		// tmux is configured with base-index 1 (see tmux.CLI), so a live window
+		// is always >= 1 and 0 reliably means "no window".
 		num := "-"
 		if s.WindowIndex > 0 {
 			num = fmt.Sprintf("%d", s.WindowIndex)
