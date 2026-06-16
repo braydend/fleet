@@ -73,6 +73,40 @@ func TestAddWorktreeThenStatus(t *testing.T) {
 	}
 }
 
+func TestIgnoreKeepsFleetMetaOutOfStatus(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktree(repo, wt, "fleet/ig", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Ignore(wt, ".fleet/"); err != nil {
+		t.Fatalf("ignore: %v", err)
+	}
+	// Write fleet's bookkeeping file; it must not register as a change.
+	if err := os.MkdirAll(filepath.Join(wt, ".fleet"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".fleet", "meta.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := g.Status(wt)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.Dirty || st.ChangeCount != 0 {
+		t.Fatalf("expected clean worktree after ignoring .fleet, got %+v", st)
+	}
+	// A real user file still counts.
+	if err := os.WriteFile(filepath.Join(wt, "real.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = g.Status(wt)
+	if !st.Dirty || st.ChangeCount != 1 {
+		t.Fatalf("expected 1 change for the user file, got %+v", st)
+	}
+}
+
 func TestRemoveWorktree(t *testing.T) {
 	repo := newRepo(t)
 	g := New()

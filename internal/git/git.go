@@ -4,7 +4,9 @@ package git
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -28,6 +30,7 @@ type Git interface {
 	Status(worktreePath string) (Status, error)
 	Push(worktreePath, branch string) error
 	IsRepo(path string) bool
+	Ignore(worktreePath, pattern string) error
 }
 
 // CLI implements Git by shelling out to the git binary.
@@ -95,6 +98,38 @@ func (c *CLI) Push(worktreePath, branch string) error {
 func (c *CLI) IsRepo(path string) bool {
 	_, err := c.git(path, "rev-parse", "--git-dir")
 	return err == nil
+}
+
+// Ignore adds pattern to the worktree's git exclude file (info/exclude in the
+// common git dir) so fleet's own bookkeeping (e.g. ".fleet/") never shows up as
+// an untracked change or gets accidentally staged. It is idempotent.
+func (c *CLI) Ignore(worktreePath, pattern string) error {
+	commonDir, err := c.git(worktreePath, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(worktreePath, commonDir)
+	}
+	infoDir := filepath.Join(commonDir, "info")
+	if err := os.MkdirAll(infoDir, 0o755); err != nil {
+		return err
+	}
+	excludePath := filepath.Join(infoDir, "exclude")
+	if existing, err := os.ReadFile(excludePath); err == nil {
+		for _, line := range strings.Split(string(existing), "\n") {
+			if strings.TrimSpace(line) == pattern {
+				return nil // already excluded
+			}
+		}
+	}
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(pattern + "\n")
+	return err
 }
 
 // parseStatus reads `git status --porcelain=v2 --branch` output.

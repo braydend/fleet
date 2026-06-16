@@ -49,6 +49,11 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 	if err := m.git.AddWorktree(p.Path, wt, branch, base); err != nil {
 		return Session{}, err
 	}
+	// Keep fleet's own .fleet/ bookkeeping out of git status and out of the
+	// user's commits.
+	if err := m.git.Ignore(wt, ".fleet/"); err != nil {
+		return Session{}, err
+	}
 	now := m.clock()
 	md := meta.Meta{
 		Project:   p.Name,

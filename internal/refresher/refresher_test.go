@@ -19,6 +19,7 @@ func (f fakeGit) DeleteBranch(_, _ string, _ bool) error   { return nil }
 func (f fakeGit) Status(string) (git.Status, error)        { return f.st, nil }
 func (f fakeGit) Push(string, string) error                { return nil }
 func (f fakeGit) IsRepo(string) bool                       { return true }
+func (f fakeGit) Ignore(string, string) error              { return nil }
 
 type fakeTmux struct{ alive map[string]bool }
 
