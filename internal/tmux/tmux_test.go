@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 func requireTmux(t *testing.T) {
@@ -13,15 +14,36 @@ func requireTmux(t *testing.T) {
 	}
 }
 
+// isolated returns a CLI pinned to a private tmux server unique to this test,
+// and arranges for that server to be killed on cleanup. This keeps tests off the
+// user's real tmux server: without it, the suite's KillWorkspace/kill-session
+// calls would destroy a live "fleet-workspace" out from under an attached user
+// (issue #5).
+func isolated(t *testing.T) *CLI {
+	t.Helper()
+	c := NewWithSocket("fleettest-" + strings.ReplaceAll(t.Name(), "/", "_"))
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", c.socket, "kill-server").Run() })
+	return c
+}
+
+// tmuxOn runs a raw tmux command against the CLI's private socket, for test
+// setup/assertions that bypass the CLI API. It fails the test on error.
+func tmuxOn(t *testing.T, c *CLI, args ...string) []byte {
+	t.Helper()
+	out, err := exec.Command("tmux", c.withSocket(args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("tmux %v: %v: %s", args, err, out)
+	}
+	return out
+}
+
 func TestCreateListHasKill(t *testing.T) {
 	requireTmux(t)
-	c := New()
+	c := isolated(t)
 	name := "fleet-testproj-testsess"
-	_ = c.Kill(name) // ensure clean start
 	if err := c.Create(name, t.TempDir(), "sleep 30"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Kill(name) })
 
 	if !c.Has(name) {
 		t.Fatal("expected Has to report the session alive")
@@ -48,6 +70,30 @@ func TestCreateListHasKill(t *testing.T) {
 	}
 }
 
+// TestSocketIsolation is the regression test for issue #5: fleet's tmux
+// operations (including destructive ones like KillWorkspace) must be confined to
+// a dedicated tmux socket and must never touch the default server, where the
+// user's real sessions live. Before this, running the test suite would
+// kill-session the live "fleet-workspace" out from under an attached user.
+func TestSocketIsolation(t *testing.T) {
+	requireTmux(t)
+	c := isolated(t)
+
+	if _, err := c.CreateWindow("fleet-proj-iso", t.TempDir(), "sleep 30"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, ok := c.LookupWindow("fleet-proj-iso"); !ok {
+		t.Fatal("expected the window on fleet's isolated socket")
+	}
+	// The default tmux server must be untouched — it has no window we created.
+	// (Read-only query on the DEFAULT socket — deliberately no -L; safe even if
+	// the user has real sessions there.)
+	out, _ := exec.Command("tmux", "list-windows", "-t", "fleet-workspace", "-F", "#{window_name}").CombinedOutput()
+	if strings.Contains(string(out), "fleet-proj-iso") {
+		t.Fatalf("isolated CLI leaked onto the default tmux server: %s", out)
+	}
+}
+
 func TestAttachCmdShape(t *testing.T) {
 	c := New()
 	cmd := c.AttachCmd("fleet-x-y")
@@ -58,12 +104,12 @@ func TestAttachCmdShape(t *testing.T) {
 
 func TestHumanizeKey(t *testing.T) {
 	cases := map[string]string{
-		"C-b":    "Ctrl-b",
-		"C-a":    "Ctrl-a",
-		"M-x":    "Alt-x",
-		"`":      "`",
-		"":       "Ctrl-b",
-		"F12":    "F12",
+		"C-b": "Ctrl-b",
+		"C-a": "Ctrl-a",
+		"M-x": "Alt-x",
+		"`":   "`",
+		"":    "Ctrl-b",
+		"F12": "F12",
 	}
 	for in, want := range cases {
 		if got := humanizeKey(in); got != want {
@@ -74,8 +120,7 @@ func TestHumanizeKey(t *testing.T) {
 
 func TestWorkspaceWindowLifecycle(t *testing.T) {
 	requireTmux(t)
-	c := New()
-	_ = c.KillWorkspace() // clean start
+	c := isolated(t)
 
 	// First window bootstraps the workspace at index 1.
 	idx, err := c.CreateWindow("fleet-proj-one", t.TempDir(), "sleep 30")
@@ -85,7 +130,6 @@ func TestWorkspaceWindowLifecycle(t *testing.T) {
 	if idx != 1 {
 		t.Fatalf("first window index = %d, want 1", idx)
 	}
-	t.Cleanup(func() { _ = c.KillWorkspace() })
 
 	// Second window gets index 2.
 	idx2, err := c.CreateWindow("fleet-proj-two", t.TempDir(), "sleep 30")
@@ -128,6 +172,99 @@ func TestWorkspaceWindowLifecycle(t *testing.T) {
 	}
 }
 
+// TestExistingWorkspaceKeepsWindowOnProcessExit reproduces issue #5: when the
+// shared workspace already exists (it survives previous fleet runs), windows
+// added to it must still be protected by remain-on-exit, so a window whose
+// process exits is kept as a dead pane instead of vanishing. If it vanishes and
+// it was the last window, the session — and, via exit-empty, the whole server —
+// is destroyed, bouncing the attached user to the dashboard.
+func TestExistingWorkspaceKeepsWindowOnProcessExit(t *testing.T) {
+	requireTmux(t)
+	c := isolated(t)
+
+	// Simulate a pre-existing/stale workspace created OUTSIDE fleet's setup
+	// branch (so it has none of fleet's options, exactly like one left over
+	// from an earlier run). A bare new-session has remain-on-exit off.
+	tmuxOn(t, c, "new-session", "-d", "-s", "fleet-workspace",
+		"-n", "fleet-bootstrap", "-c", t.TempDir(), "sleep 30")
+
+	// Adding a window now goes through the "workspace already exists" branch.
+	if _, err := c.CreateWindow("fleet-proj-one", t.TempDir(), "sleep 30"); err != nil {
+		t.Fatalf("create window: %v", err)
+	}
+
+	// End the window's process the way claude exiting would.
+	pid := strings.TrimSpace(string(tmuxOn(t, c, "list-panes", "-t",
+		"fleet-workspace:fleet-proj-one", "-F", "#{pane_pid}")))
+	if _, err := exec.Command("kill", pid).CombinedOutput(); err != nil {
+		t.Fatalf("kill pane process: %v", err)
+	}
+
+	// The window must still exist (kept as a dead pane), not vanish.
+	var w Window
+	var ok bool
+	for i := 0; i < 50; i++ {
+		if w, ok = c.LookupWindow("fleet-proj-one"); ok && w.Dead {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !ok {
+		t.Fatal("window vanished after its process exited; remain-on-exit not applied to existing workspace")
+	}
+	if !w.Dead {
+		t.Fatalf("expected window kept as a dead pane, got %+v", w)
+	}
+}
+
+// TestEnsureConfiguredProtectsExistingWorkspace covers the attach path on a
+// workspace that already exists with windows fleet didn't configure (a leftover
+// from before this fix, or from a previous fleet version). EnsureConfigured must
+// turn off exit-empty and retro-fit remain-on-exit onto the existing windows so
+// they survive their process exiting.
+func TestEnsureConfiguredProtectsExistingWorkspace(t *testing.T) {
+	requireTmux(t)
+	c := isolated(t)
+
+	// Stale workspace with a window created outside fleet's setup (no options).
+	tmuxOn(t, c, "new-session", "-d", "-s", "fleet-workspace",
+		"-n", "fleet-legacy", "-c", t.TempDir(), "sleep 30")
+
+	if err := c.EnsureConfigured(); err != nil {
+		t.Fatalf("ensure configured: %v", err)
+	}
+
+	if got := strings.TrimSpace(string(tmuxOn(t, c, "show-options", "-s", "-v", "exit-empty"))); got != "off" {
+		t.Fatalf("exit-empty = %q, want off", got)
+	}
+
+	// The pre-existing window must now survive its process exiting.
+	pid := strings.TrimSpace(string(tmuxOn(t, c, "list-panes", "-t",
+		"fleet-workspace:fleet-legacy", "-F", "#{pane_pid}")))
+	if _, err := exec.Command("kill", pid).CombinedOutput(); err != nil {
+		t.Fatalf("kill: %v", err)
+	}
+	var ok bool
+	var w Window
+	for i := 0; i < 50; i++ {
+		if w, ok = c.LookupWindow("fleet-legacy"); ok && w.Dead {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !ok || !w.Dead {
+		t.Fatalf("legacy window not protected after EnsureConfigured: ok=%v %+v", ok, w)
+	}
+}
+
+func TestEnsureConfiguredNoWorkspaceIsNoError(t *testing.T) {
+	requireTmux(t)
+	c := isolated(t)
+	if err := c.EnsureConfigured(); err != nil {
+		t.Fatalf("EnsureConfigured with no workspace should be a no-op, got %v", err)
+	}
+}
+
 func TestAttachWorkspaceCmdShape(t *testing.T) {
 	c := New()
 	cmd := c.AttachWorkspaceCmd()
@@ -147,21 +284,16 @@ func TestAttachWorkspaceCmdShape(t *testing.T) {
 
 func TestConfigureTabsAndSelect(t *testing.T) {
 	requireTmux(t)
-	c := New()
-	_ = c.KillWorkspace()
+	c := isolated(t)
 	if _, err := c.CreateWindow("fleet-proj-one", t.TempDir(), "sleep 30"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	t.Cleanup(func() { _ = c.KillWorkspace() })
 
 	if err := c.ConfigureTabs(); err != nil {
 		t.Fatalf("configure tabs: %v", err)
 	}
 	// window-status-format should reference our label option.
-	out, err := exec.Command("tmux", "show-options", "-t", "fleet-workspace", "-v", "window-status-format").Output()
-	if err != nil {
-		t.Fatalf("show-options: %v", err)
-	}
+	out := tmuxOn(t, c, "show-options", "-t", "fleet-workspace", "-v", "window-status-format")
 	if !strings.Contains(string(out), "@fleet_label") {
 		t.Fatalf("window-status-format = %q, expected to reference @fleet_label", out)
 	}
@@ -172,8 +304,7 @@ func TestConfigureTabsAndSelect(t *testing.T) {
 
 func TestListWindowsNoWorkspace(t *testing.T) {
 	requireTmux(t)
-	c := New()
-	_ = c.KillWorkspace()
+	c := isolated(t)
 	ws, err := c.ListWindows()
 	if err != nil {
 		t.Fatalf("expected no error when workspace absent, got %v", err)
@@ -185,24 +316,18 @@ func TestListWindowsNoWorkspace(t *testing.T) {
 
 func TestDecorateSetsStatusBar(t *testing.T) {
 	requireTmux(t)
-	c := New()
+	c := isolated(t)
 	name := "fleet-decor-test"
-	_ = c.Kill(name)
 	if err := c.Create(name, t.TempDir(), "sleep 30"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Kill(name) })
 
 	if err := c.Decorate(name, "myproj/feature"); err != nil {
 		t.Fatalf("decorate: %v", err)
 	}
 
 	get := func(opt string) string {
-		out, err := exec.Command("tmux", "show-options", "-t", name, "-v", opt).Output()
-		if err != nil {
-			t.Fatalf("show-options %s: %v", opt, err)
-		}
-		return string(out)
+		return string(tmuxOn(t, c, "show-options", "-t", name, "-v", opt))
 	}
 	if got := get("status"); got != "on\n" && got != "on" {
 		t.Fatalf("status = %q, want on", got)

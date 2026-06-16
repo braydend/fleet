@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,7 +53,11 @@ func TestSmokeRealAdapters(t *testing.T) {
 	cfg := config.Config{ScanRoot: root, WorktreeBaseDir: base}
 
 	g := git.New()
-	tm := tmux.New()
+	// Use a private tmux socket so this smoke test never touches the user's real
+	// tmux server / live fleet sessions (issue #5).
+	sock := "fleetsmoke-" + strings.ReplaceAll(t.Name(), "/", "_")
+	tm := tmux.NewWithSocket(sock)
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", sock, "kill-server").Run() })
 
 	// Simulate what Manager.Create does, but launch a benign command instead of
 	// `claude` so the smoke test stays non-interactive.
