@@ -88,8 +88,12 @@ worktree_base_dir: /home/you/.local/share/fleet/worktrees
 3. Press `n`, pick a project, name the session, accept or edit the base/branch,
    and submit. A new session appears on the dashboard.
 4. Select it and press `Enter` to attach — you're now in a live Claude Code
-   session running in an isolated worktree. Detach with tmux's `Ctrl-b d` to
-   return to the dashboard.
+   session running in an isolated worktree. While attached, a small status bar
+   at the bottom shows which session you're in and the key to get back
+   (`<prefix> d`, e.g. `Ctrl-b d`). Detach to return to the dashboard.
+
+If a session has exited (shown as `○`), selecting it relaunches Claude Code in
+its existing worktree.
 
 ### Keybindings
 

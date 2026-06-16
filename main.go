@@ -75,6 +75,9 @@ func run() error {
 			if err := mgr.EnsureRunning(s); err != nil {
 				return func() tea.Msg { return ui.ErrorMsgFor(err) }
 			}
+			// Show a small status bar inside the session with navigation help.
+			// Best-effort: a decoration failure must not block attaching.
+			_ = tm.Decorate(s.TmuxName, s.Project+"/"+s.Name)
 			return tea.ExecProcess(mgr.AttachCmd(s), func(err error) tea.Msg {
 				// After detaching, refresh the list.
 				ss, rerr := refresher.Build(cfg, tm, g)

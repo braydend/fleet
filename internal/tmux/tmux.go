@@ -89,3 +89,55 @@ func (c *CLI) Has(name string) bool {
 func (c *CLI) AttachCmd(name string) *exec.Cmd {
 	return exec.Command("tmux", "attach", "-t", name)
 }
+
+// Decorate configures a small status bar on the session (scoped to that session
+// only) so that while the user is attached they can see which fleet session
+// they're in and how to get back to the dashboard. label is shown on the left
+// (e.g. "project/session"); the right shows the detach hint using the user's
+// actual tmux prefix key. Best-effort: it returns the first error encountered.
+func (c *CLI) Decorate(name, label string) error {
+	// Escape '#' so tmux doesn't interpret it as a format directive.
+	label = strings.ReplaceAll(label, "#", "##")
+	prefix := c.prefixKey()
+	left := fmt.Sprintf(" #[bold]fleet#[nobold] · %s ", label)
+	right := fmt.Sprintf(" %s d → fleet dashboard ", prefix)
+
+	opts := [][]string{
+		{"set-option", "-t", name, "status", "on"},
+		{"set-option", "-t", name, "status-style", "bg=colour237,fg=colour250"},
+		{"set-option", "-t", name, "status-left-length", "80"},
+		{"set-option", "-t", name, "status-right-length", "80"},
+		{"set-option", "-t", name, "status-left", left},
+		{"set-option", "-t", name, "status-right", right},
+	}
+	for _, args := range opts {
+		if _, err := c.tmux(args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// prefixKey returns the user's tmux prefix in human form (e.g. "Ctrl-b"),
+// falling back to "Ctrl-b" if it can't be determined.
+func (c *CLI) prefixKey() string {
+	out, err := c.tmux("show-options", "-gv", "prefix")
+	if err != nil {
+		return "Ctrl-b"
+	}
+	return humanizeKey(strings.TrimSpace(out))
+}
+
+// humanizeKey turns a tmux key name (e.g. "C-b", "M-x") into a friendlier label.
+func humanizeKey(k string) string {
+	switch {
+	case k == "":
+		return "Ctrl-b"
+	case strings.HasPrefix(k, "C-"):
+		return "Ctrl-" + strings.TrimPrefix(k, "C-")
+	case strings.HasPrefix(k, "M-"):
+		return "Alt-" + strings.TrimPrefix(k, "M-")
+	default:
+		return k
+	}
+}
