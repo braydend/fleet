@@ -19,7 +19,35 @@ import (
 	"github.com/bray/fleet/internal/ui"
 )
 
+// Build metadata, overridden at release time via -ldflags -X main.version=...
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+// versionRequested reports whether argv asks for the version.
+func versionRequested(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	switch args[1] {
+	case "--version", "-v", "version":
+		return true
+	}
+	return false
+}
+
+// versionLine is the single line printed by --version.
+func versionLine() string {
+	return fmt.Sprintf("fleet %s (%s, %s)", version, commit, date)
+}
+
 func main() {
+	if versionRequested(os.Args) {
+		fmt.Println(versionLine())
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "fleet:", err)
 		os.Exit(1)

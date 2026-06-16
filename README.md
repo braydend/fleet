@@ -46,6 +46,30 @@ message if any are missing.
 
 ## Install
 
+### Download a release
+
+Prebuilt binaries for Linux and macOS (x64 and ARM) are attached to each
+[GitHub Release](https://github.com/braydend/fleet/releases). Download the
+archive for your platform, then:
+
+```bash
+tar -xzf fleet_<version>_<os>_<arch>.tar.gz
+sudo mv fleet /usr/local/bin/   # or anywhere on your PATH
+fleet --version
+```
+
+**macOS:** the binaries are unsigned, so Gatekeeper will block the first run.
+Clear the quarantine flag once after extracting:
+
+```bash
+xattr -d com.apple.quarantine ./fleet
+```
+
+(Alternatively, right-click the binary in Finder and choose **Open** the first
+time.)
+
+### Build from source
+
 Clone and build the binary:
 
 ```bash
