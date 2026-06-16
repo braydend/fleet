@@ -23,6 +23,9 @@ type newSessionForm struct {
 	branch      string
 	base        string
 	field       int
+	// branchTouched records whether the user has edited the branch field
+	// directly. Until they do, the branch tracks the (sanitized) session name.
+	branchTouched bool
 }
 
 // newForm seeds a form for a project with sensible defaults.
@@ -35,10 +38,10 @@ func newForm(p projects.Project) newSessionForm {
 }
 
 // syncBranchDefault keeps the branch defaulted to the (sanitized) session name
-// until the user edits it explicitly. For simplicity we recompute whenever
-// branch is empty.
+// until the user edits it explicitly. We recompute from the full session name
+// on every change so the branch tracks the whole name, not just its first rune.
 func (f *newSessionForm) syncBranchDefault() {
-	if f.branch == "" && f.sessionName != "" {
+	if !f.branchTouched {
 		f.branch = naming.Sanitize(f.sessionName)
 	}
 }

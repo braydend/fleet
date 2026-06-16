@@ -189,6 +189,10 @@ func (m Model) keyNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(*p) > 0 {
 			*p = (*p)[:len(*p)-1]
 		}
+		if m.form.field == fieldBranch {
+			m.form.branchTouched = true
+		}
+		m.form.syncBranchDefault()
 	case "enter":
 		m.form.syncBranchDefault()
 		if m.form.field < fieldBase {
@@ -203,6 +207,9 @@ func (m Model) keyNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(msg.Runes) > 0 {
 			p := m.form.active()
 			*p += string(msg.Runes)
+			if m.form.field == fieldBranch {
+				m.form.branchTouched = true
+			}
 			m.form.syncBranchDefault()
 		}
 	}
