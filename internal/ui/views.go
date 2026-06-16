@@ -20,6 +20,10 @@ func (m Model) View() string {
 		return m.viewProjectPicker()
 	case stateNewSession:
 		return m.form.view()
+	case stateCleanupMenu:
+		return m.viewCleanupMenu()
+	case stateConfirm:
+		return m.viewConfirm()
 	default:
 		return m.viewDashboard()
 	}
@@ -68,4 +72,27 @@ func (m Model) viewProjectPicker() string {
 	}
 	b.WriteString("\n" + dimStyle.Render("enter select · esc cancel"))
 	return b.String()
+}
+
+func (m Model) viewCleanupMenu() string {
+	s, _ := m.selected()
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("cleanup — "+s.Project+"/"+s.Name) + "\n\n")
+	choices := []string{"delete worktree + branch", "push / open PR", "leave (kill tmux only)"}
+	for i, c := range choices {
+		prefix := "  "
+		if cleanupChoice(i) == m.cleanupChoice {
+			prefix = "› "
+		}
+		b.WriteString(prefix + c + "\n")
+	}
+	b.WriteString("\n" + dimStyle.Render("enter choose · esc cancel"))
+	return b.String()
+}
+
+func (m Model) viewConfirm() string {
+	s := m.pendingDelete
+	return titleStyle.Render("confirm delete") + "\n\n" +
+		fmt.Sprintf("%s/%s has uncommitted or unpushed changes.\n", s.Project, s.Name) +
+		"Delete worktree and branch anyway? " + dimStyle.Render("(y/n)")
 }

@@ -101,3 +101,63 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 		t.Fatalf("create got name=%q branch=%q base=%q", gotName, gotBranch, gotBase)
 	}
 }
+
+func TestEnterAttachesSelectedSession(t *testing.T) {
+	var attached session.Session
+	a := Actions{Attach: func(s session.Session) tea.Cmd {
+		attached = s
+		return func() tea.Msg { return nil }
+	}}
+	m := New(&a, nil)
+	m.sessions = sample()
+	m.cursor = 0
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected attach command")
+	}
+	if attached.Name != "a" {
+		t.Fatalf("attached wrong session: %+v", attached)
+	}
+}
+
+func TestDOpensCleanupMenu(t *testing.T) {
+	m := New(nil, nil)
+	m.sessions = sample()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if updated.(Model).state != stateCleanupMenu {
+		t.Fatal("expected cleanup menu state")
+	}
+}
+
+func TestCleanupLeaveCallsLeave(t *testing.T) {
+	left := false
+	a := Actions{
+		Leave:   func(session.Session) error { left = true; return nil },
+		Refresh: func() ([]session.Session, error) { return nil, nil },
+	}
+	m := New(&a, nil)
+	m.sessions = sample()
+	m.cursor = 0
+	m.state = stateCleanupMenu
+	m.cleanupChoice = cleanupLeave
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected command")
+	}
+	_ = cmd()
+	if !left {
+		t.Fatal("expected Leave to be called")
+	}
+}
+
+func TestDeleteDirtyRequiresConfirm(t *testing.T) {
+	m := New(nil, nil)
+	m.sessions = sample() // session "a" is dirty
+	m.cursor = 0
+	m.state = stateCleanupMenu
+	m.cleanupChoice = cleanupDelete
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if updated.(Model).state != stateConfirm {
+		t.Fatal("expected confirm state for dirty delete")
+	}
+}

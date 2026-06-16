@@ -18,6 +18,15 @@ const (
 	stateConfirm
 )
 
+type cleanupChoice int
+
+const (
+	cleanupDelete cleanupChoice = iota
+	cleanupPushPR
+	cleanupLeave
+	cleanupChoiceCount
+)
+
 // Actions the model needs from the rest of the app, injected for testability.
 type Actions struct {
 	Refresh  func() ([]session.Session, error)
@@ -40,6 +49,10 @@ type Model struct {
 	// new-session sub-state
 	projects []projects.Project
 	form     newSessionForm
+
+	// cleanup sub-state
+	cleanupChoice cleanupChoice
+	pendingDelete session.Session // awaiting confirm
 }
 
 // New builds a Model. actions may be the zero value in tests; refreshFn is the
@@ -95,6 +108,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyProjectPicker(msg)
 	case stateNewSession:
 		return m.keyNewSession(msg)
+	case stateCleanupMenu:
+		return m.keyCleanupMenu(msg)
+	case stateConfirm:
+		return m.keyConfirm(msg)
 	default:
 		return m.keyDashboard(msg)
 	}
@@ -115,6 +132,15 @@ func (m Model) keyDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		if m.cursor < len(m.sessions)-1 {
 			m.cursor++
+		}
+	case "enter":
+		if s, ok := m.selected(); ok && m.actions.Attach != nil {
+			return m, m.actions.Attach(s)
+		}
+	case "d":
+		if _, ok := m.selected(); ok {
+			m.state = stateCleanupMenu
+			m.cleanupChoice = cleanupDelete
 		}
 	}
 	return m, nil
@@ -186,6 +212,100 @@ func (m Model) loadProjects() tea.Cmd {
 			return errorMsg{err: err}
 		}
 		return projectsLoadedMsg{projects: ps}
+	}
+}
+
+func (m Model) selected() (session.Session, bool) {
+	if m.cursor >= 0 && m.cursor < len(m.sessions) {
+		return m.sessions[m.cursor], true
+	}
+	return session.Session{}, false
+}
+
+func (m Model) keyCleanupMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.state = stateDashboard
+	case "up", "k":
+		if m.cleanupChoice > 0 {
+			m.cleanupChoice--
+		}
+	case "down", "j":
+		if m.cleanupChoice < cleanupChoiceCount-1 {
+			m.cleanupChoice++
+		}
+	case "enter":
+		s, ok := m.selected()
+		if !ok {
+			m.state = stateDashboard
+			return m, nil
+		}
+		switch m.cleanupChoice {
+		case cleanupLeave:
+			m.state = stateDashboard
+			return m, m.runThenRefresh(func() error { return m.callLeave(s) })
+		case cleanupPushPR:
+			m.state = stateDashboard
+			return m, m.runThenRefresh(func() error { return m.callPushPR(s) })
+		case cleanupDelete:
+			if s.Git.Dirty || s.Git.Ahead > 0 {
+				m.pendingDelete = s
+				m.state = stateConfirm
+				return m, nil
+			}
+			m.state = stateDashboard
+			return m, m.runThenRefresh(func() error { return m.callDelete(s) })
+		}
+	}
+	return m, nil
+}
+
+func (m Model) keyConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		s := m.pendingDelete
+		m.state = stateDashboard
+		return m, m.runThenRefresh(func() error { return m.callDelete(s) })
+	case "n", "esc":
+		m.state = stateDashboard
+	}
+	return m, nil
+}
+
+func (m Model) callLeave(s session.Session) error {
+	if m.actions.Leave != nil {
+		return m.actions.Leave(s)
+	}
+	return nil
+}
+func (m Model) callDelete(s session.Session) error {
+	if m.actions.Delete != nil {
+		return m.actions.Delete(s, true) // delete branch too
+	}
+	return nil
+}
+func (m Model) callPushPR(s session.Session) error {
+	if m.actions.PushPR != nil {
+		return m.actions.PushPR(s)
+	}
+	return nil
+}
+
+// runThenRefresh runs fn, then refreshes the session list.
+func (m Model) runThenRefresh(fn func() error) tea.Cmd {
+	refreshFn := m.actions.Refresh
+	return func() tea.Msg {
+		if err := fn(); err != nil {
+			return errorMsg{err: err}
+		}
+		if refreshFn != nil {
+			ss, err := refreshFn()
+			if err != nil {
+				return errorMsg{err: err}
+			}
+			return sessionsUpdatedMsg{sessions: ss}
+		}
+		return sessionsUpdatedMsg{}
 	}
 }
 
