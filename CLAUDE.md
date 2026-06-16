@@ -139,6 +139,23 @@ implementation (commit order is flexible). A PR that changes behaviour without
 its accompanying superpowers documentation is incomplete and should not be
 merged.
 
+### 4. Commit messages MUST follow Conventional Commits
+
+Releases and version numbers are automated from commit history via
+release-please (see
+[`docs/superpowers/specs/2026-06-16-release-binaries-design.md`](docs/superpowers/specs/2026-06-16-release-binaries-design.md)).
+Versioning therefore depends on every commit following the
+[Conventional Commits](https://www.conventionalcommits.org/) format:
+
+- `feat: ...` → minor bump, `fix: ...` → patch bump.
+- A `!` after the type (`feat!:`) or a `BREAKING CHANGE:` footer → major bump.
+- Other types (`docs:`, `chore:`, `test:`, `refactor:`, `ci:`, etc.) do not
+  trigger a release on their own.
+- An optional scope is encouraged: `feat(ui): ...`, `fix(tmux): ...`.
+
+A non-conforming commit message silently breaks version inference, so this is
+**mandatory** for every commit.
+
 ## Working conventions
 
 - **TDD:** write tests before implementation (project follows the superpowers
