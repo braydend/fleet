@@ -1,6 +1,7 @@
 package refresher
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
 	"github.com/bray/fleet/internal/naming"
+	"github.com/bray/fleet/internal/session"
 	"github.com/bray/fleet/internal/tmux"
 )
 
@@ -47,6 +49,19 @@ var (
 	_ workspaceTmux = (*fakeTmux)(nil)
 	_ git.Git       = fakeGit{}
 )
+
+func TestTabLabelEscapesHash(t *testing.T) {
+	s := session.Session{Project: "c#", Name: "feat#1", Activity: activity.Idle}
+	got := tabLabel(s)
+	// The literal '#' from user names must be doubled; the intentional "#["
+	// style directives must remain single.
+	if !strings.Contains(got, "c##/feat##1") {
+		t.Fatalf("expected escaped names in label, got %q", got)
+	}
+	if !strings.Contains(got, "#[fg=") || !strings.Contains(got, "#[default]") {
+		t.Fatalf("style directives should stay literal, got %q", got)
+	}
+}
 
 func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	base := t.TempDir()

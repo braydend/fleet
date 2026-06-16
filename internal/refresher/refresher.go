@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bray/fleet/internal/activity"
@@ -109,12 +110,20 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 }
 
 // tabLabel builds the tmux tab text for a session: a coloured glyph, the
-// project/session name, and a dirty marker.
+// project/session name, and a dirty marker. User-supplied names are escaped so
+// a literal '#' in a project/session name can't be misread as a tmux format
+// directive (the surrounding "#[...]" codes are intentional and stay literal).
 func tabLabel(s session.Session) string {
 	dirty := ""
 	if s.Git.Dirty {
 		dirty = fmt.Sprintf("✱%d", s.Git.ChangeCount)
 	}
 	return fmt.Sprintf("#[fg=%s]%s#[default] %s/%s%s",
-		s.Activity.TmuxColor(), s.Activity.Glyph(), s.Project, s.Name, dirty)
+		s.Activity.TmuxColor(), s.Activity.Glyph(),
+		escapeTmux(s.Project), escapeTmux(s.Name), dirty)
+}
+
+// escapeTmux doubles '#' so tmux does not interpret it as a format directive.
+func escapeTmux(s string) string {
+	return strings.ReplaceAll(s, "#", "##")
 }
