@@ -34,11 +34,12 @@ func newForm(p projects.Project) newSessionForm {
 	}
 }
 
-// syncBranchDefault keeps the branch defaulted to fleet/<session> until the user
-// edits it explicitly. For simplicity we recompute whenever branch is empty.
+// syncBranchDefault keeps the branch defaulted to the (sanitized) session name
+// until the user edits it explicitly. For simplicity we recompute whenever
+// branch is empty.
 func (f *newSessionForm) syncBranchDefault() {
 	if f.branch == "" && f.sessionName != "" {
-		f.branch = "fleet/" + naming.Sanitize(f.sessionName)
+		f.branch = naming.Sanitize(f.sessionName)
 	}
 }
 

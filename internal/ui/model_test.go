@@ -118,6 +118,15 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 	}
 }
 
+func TestBranchDefaultsToSessionName(t *testing.T) {
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	f.sessionName = "fix bug"
+	f.syncBranchDefault()
+	if f.branch != "fix_bug" {
+		t.Fatalf("branch = %q, want %q (session name, sanitized, no prefix)", f.branch, "fix_bug")
+	}
+}
+
 func TestEnterAttachesSelectedSession(t *testing.T) {
 	var attached session.Session
 	a := Actions{Attach: func(s session.Session) tea.Cmd {
