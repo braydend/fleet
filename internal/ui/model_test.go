@@ -2,11 +2,13 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/session"
@@ -16,9 +18,23 @@ var errSample = errors.New("boom")
 
 func sample() []session.Session {
 	return []session.Session{
-		{Project: "app", Name: "a", Branch: "fleet/a", Alive: true,
+		{Project: "app", Name: "a", Branch: "fleet/a", Base: "main", Alive: true,
+			Activity: activity.Working, WindowIndex: 1,
 			Git: git.Status{Branch: "fleet/a", ChangeCount: 1, Dirty: true}, CreatedAt: time.Unix(1, 0)},
-		{Project: "app", Name: "b", Branch: "fleet/b", Exited: true, CreatedAt: time.Unix(2, 0)},
+		{Project: "app", Name: "b", Branch: "fleet/b", Base: "develop", Exited: true,
+			Activity: activity.Exited, WindowIndex: 0, CreatedAt: time.Unix(2, 0)},
+	}
+}
+
+func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	out := updated.(Model).View()
+
+	for _, want := range []string{"app", "fleet/a", "← main", "1", "working", "exited", "legend"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("dashboard view missing %q.\n---\n%s", want, out)
+		}
 	}
 }
 

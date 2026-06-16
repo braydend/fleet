@@ -36,3 +36,16 @@ func TestWorktreePathSanitizes(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestWorkspaceAndWindowTarget(t *testing.T) {
+	if Workspace != "fleet-workspace" {
+		t.Fatalf("Workspace = %q", Workspace)
+	}
+	// Window target is workspace:windowName, where windowName is the usual
+	// sanitized fleet name.
+	got := WindowTarget("My App", "fix bug")
+	want := "fleet-workspace:fleet-My_App-fix_bug"
+	if got != want {
+		t.Fatalf("WindowTarget = %q, want %q", got, want)
+	}
+}

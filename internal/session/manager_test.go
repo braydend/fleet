@@ -4,10 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
 	"github.com/bray/fleet/internal/projects"
+	"github.com/bray/fleet/internal/tmux"
 )
 
 // --- fakes ---
@@ -25,30 +27,43 @@ func (f *fakeGit) RemoveWorktree(_, wt string, _ bool) error {
 	f.removed = append(f.removed, wt)
 	return nil
 }
-func (f *fakeGit) DeleteBranch(_, b string, _ bool) error { f.deleted = append(f.deleted, b); return nil }
-func (f *fakeGit) Status(string) (git.Status, error)      { return f.status, nil }
-func (f *fakeGit) Push(string, string) error              { return nil }
-func (f *fakeGit) IsRepo(string) bool                     { return true }
-func (f *fakeGit) Ignore(string, string) error            { return nil }
-
-type fakeTmux struct {
-	created []string
-	killed  []string
-	alive   map[string]bool
-}
-
-func (f *fakeTmux) Create(name, _, _ string) error {
-	f.created = append(f.created, name)
-	if f.alive == nil {
-		f.alive = map[string]bool{}
-	}
-	f.alive[name] = true
+func (f *fakeGit) DeleteBranch(_, b string, _ bool) error {
+	f.deleted = append(f.deleted, b)
 	return nil
 }
-func (f *fakeTmux) Kill(name string) error { f.killed = append(f.killed, name); delete(f.alive, name); return nil }
-func (f *fakeTmux) Has(name string) bool   { return f.alive[name] }
+func (f *fakeGit) Status(string) (git.Status, error) { return f.status, nil }
+func (f *fakeGit) Push(string, string) error         { return nil }
+func (f *fakeGit) IsRepo(string) bool                { return true }
+func (f *fakeGit) Ignore(string, string) error       { return nil }
 
-// fakeTmux satisfies tmuxPort (Create, Kill, Has only — no AttachCmd, no List).
+type fakeTmux struct {
+	created   []string // window names created
+	killed    []string // targets killed
+	respawned []string // targets respawned
+	windows   map[string]tmux.Window
+}
+
+func (f *fakeTmux) CreateWindow(name, _, _ string) (int, error) {
+	f.created = append(f.created, name)
+	if f.windows == nil {
+		f.windows = map[string]tmux.Window{}
+	}
+	idx := len(f.windows) + 1
+	f.windows[name] = tmux.Window{Index: idx, Name: name}
+	return idx, nil
+}
+func (f *fakeTmux) KillWindow(target string) error {
+	f.killed = append(f.killed, target)
+	return nil
+}
+func (f *fakeTmux) RespawnWindow(target, _, _ string) error {
+	f.respawned = append(f.respawned, target)
+	return nil
+}
+func (f *fakeTmux) LookupWindow(name string) (tmux.Window, bool) {
+	w, ok := f.windows[name]
+	return w, ok
+}
 
 func newManager(t *testing.T, g git.Git, tm tmuxPort) (*Manager, config.Config) {
 	cfg := config.Config{ScanRoot: "/code", WorktreeBaseDir: t.TempDir()}
@@ -67,14 +82,12 @@ func TestCreateAddsWorktreeMetaAndTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-
 	if len(fg.added) != 1 {
 		t.Fatalf("expected 1 worktree add, got %v", fg.added)
 	}
 	if len(ft.created) != 1 || ft.created[0] != "fleet-My_App-fix_bug" {
-		t.Fatalf("unexpected tmux create: %v", ft.created)
+		t.Fatalf("unexpected window create: %v", ft.created)
 	}
-	// meta.json should be readable from the worktree.
 	md, err := meta.Read(s.WorktreePath)
 	if err != nil {
 		t.Fatalf("meta read: %v", err)
@@ -82,22 +95,22 @@ func TestCreateAddsWorktreeMetaAndTmux(t *testing.T) {
 	if md.Branch != "fleet/fix-bug" || md.Base != "main" || md.RepoPath != "/code/my-app" {
 		t.Fatalf("unexpected meta: %+v", md)
 	}
-	if s.TmuxName != "fleet-My_App-fix_bug" || !s.Alive {
+	if s.TmuxName != "fleet-My_App-fix_bug" || !s.Alive || s.WindowIndex != 1 {
 		t.Fatalf("unexpected session: %+v", s)
 	}
 	_ = cfg
 }
 
-func TestLeaveKillsTmuxOnly(t *testing.T) {
+func TestLeaveKillsWindowOnly(t *testing.T) {
 	fg := &fakeGit{}
 	ft := &fakeTmux{}
 	m, _ := newManager(t, fg, ft)
-	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
 	if err := m.Leave(s); err != nil {
 		t.Fatalf("leave: %v", err)
 	}
-	if len(ft.killed) != 1 || len(fg.removed) != 0 {
-		t.Fatalf("leave should kill tmux only: killed=%v removed=%v", ft.killed, fg.removed)
+	if len(ft.killed) != 1 || ft.killed[0] != "fleet-workspace:fleet-p-s" || len(fg.removed) != 0 {
+		t.Fatalf("leave should kill window only: killed=%v removed=%v", ft.killed, fg.removed)
 	}
 }
 
@@ -105,15 +118,17 @@ func TestDeleteKillsRemovesAndOptionallyDropsBranch(t *testing.T) {
 	fg := &fakeGit{}
 	ft := &fakeTmux{}
 	m, _ := newManager(t, fg, ft)
-	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
 
 	if err := m.Delete(s, false); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
+	if len(ft.killed) != 1 || ft.killed[0] != "fleet-workspace:fleet-p-s" {
+		t.Fatalf("delete should kill the window target: killed=%v", ft.killed)
+	}
 	if len(fg.removed) != 1 || len(fg.deleted) != 0 {
 		t.Fatalf("expected remove only: removed=%v deleted=%v", fg.removed, fg.deleted)
 	}
-
 	if err := m.Delete(s, true); err != nil {
 		t.Fatalf("delete+branch: %v", err)
 	}
@@ -123,25 +138,48 @@ func TestDeleteKillsRemovesAndOptionallyDropsBranch(t *testing.T) {
 }
 
 func TestEnsureRunningNoopWhenAlive(t *testing.T) {
-	ft := &fakeTmux{alive: map[string]bool{"fleet-p-s": true}}
+	ft := &fakeTmux{windows: map[string]tmux.Window{"fleet-p-s": {Index: 1, Name: "fleet-p-s"}}}
 	m, _ := newManager(t, &fakeGit{}, ft)
-	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt"}
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt"}
 	if err := m.EnsureRunning(s); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
-	if len(ft.created) != 0 {
-		t.Fatalf("expected no tmux create for a live session, got %v", ft.created)
+	if len(ft.created) != 0 || len(ft.respawned) != 0 {
+		t.Fatalf("expected no create/respawn for a live session: created=%v respawned=%v", ft.created, ft.respawned)
 	}
 }
 
-func TestEnsureRunningRecreatesWhenDead(t *testing.T) {
+func TestEnsureRunningCreatesWhenMissing(t *testing.T) {
 	ft := &fakeTmux{}
 	m, _ := newManager(t, &fakeGit{}, ft)
-	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt"}
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt"}
 	if err := m.EnsureRunning(s); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
 	if len(ft.created) != 1 || ft.created[0] != "fleet-p-s" {
-		t.Fatalf("expected tmux recreate for a dead session, got %v", ft.created)
+		t.Fatalf("expected window create for a missing session, got %v", ft.created)
+	}
+}
+
+func TestEnsureRunningRespawnsWhenDead(t *testing.T) {
+	ft := &fakeTmux{windows: map[string]tmux.Window{"fleet-p-s": {Index: 1, Name: "fleet-p-s", Dead: true}}}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt"}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if len(ft.respawned) != 1 || ft.respawned[0] != "fleet-workspace:fleet-p-s" {
+		t.Fatalf("expected respawn for a dead window, got %v", ft.respawned)
+	}
+}
+
+func TestSessionHasActivityFields(t *testing.T) {
+	s := Session{
+		Activity:     activity.Working,
+		LastActivity: time.Unix(5, 0),
+		WindowIndex:  2,
+	}
+	if s.Activity != activity.Working || s.WindowIndex != 2 {
+		t.Fatalf("unexpected session fields: %+v", s)
 	}
 }

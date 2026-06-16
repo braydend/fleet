@@ -43,8 +43,12 @@ leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
 
 ## Core design decisions
 
-- **Session model:** tmux-backed. Each instance = a tmux session named
-  `fleet-<project>-<session>` running `claude` in its worktree.
+- **Session model:** tmux-backed. All instances share one tmux session
+  (`fleet-workspace`); each instance is a *window* named
+  `fleet-<project>-<session>` running `claude` in its worktree. Windows act as
+  tabs — switch with Alt-1..9 / Alt-←/→ while attached. Per-session activity
+  (working / waiting / idle / exited) is derived from tmux's window-activity
+  timestamp plus a best-effort capture-pane prompt match (`internal/activity`).
 - **Project discovery:** scan a configured root directory for git repos.
 - **Worktree location:** central dir per project —
   `<worktreeBaseDir>/<project>/<session>`.
