@@ -72,6 +72,75 @@ func TestHumanizeKey(t *testing.T) {
 	}
 }
 
+func TestWorkspaceWindowLifecycle(t *testing.T) {
+	requireTmux(t)
+	c := New()
+	_ = c.KillWorkspace() // clean start
+
+	// First window bootstraps the workspace at index 1.
+	idx, err := c.CreateWindow("fleet-proj-one", t.TempDir(), "sleep 30")
+	if err != nil {
+		t.Fatalf("create window: %v", err)
+	}
+	if idx != 1 {
+		t.Fatalf("first window index = %d, want 1", idx)
+	}
+	t.Cleanup(func() { _ = c.KillWorkspace() })
+
+	// Second window gets index 2.
+	idx2, err := c.CreateWindow("fleet-proj-two", t.TempDir(), "sleep 30")
+	if err != nil {
+		t.Fatalf("create window 2: %v", err)
+	}
+	if idx2 != 2 {
+		t.Fatalf("second window index = %d, want 2", idx2)
+	}
+
+	ws, err := c.ListWindows()
+	if err != nil {
+		t.Fatalf("list windows: %v", err)
+	}
+	if len(ws) != 2 {
+		t.Fatalf("expected 2 windows, got %d: %+v", len(ws), ws)
+	}
+
+	w, ok := c.LookupWindow("fleet-proj-one")
+	if !ok || w.Index != 1 || w.Dead {
+		t.Fatalf("lookup proj-one = %+v ok=%v", w, ok)
+	}
+
+	// Capturing a pane returns its text without error.
+	if _, err := c.CapturePane("fleet-workspace:fleet-proj-one"); err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+
+	// Setting a label must not error.
+	if err := c.SetWindowLabel("fleet-workspace:fleet-proj-one", "◉ proj/one"); err != nil {
+		t.Fatalf("set label: %v", err)
+	}
+
+	// Killing a window drops it; renumber-windows keeps the rest contiguous.
+	if err := c.KillWindow("fleet-workspace:fleet-proj-one"); err != nil {
+		t.Fatalf("kill window: %v", err)
+	}
+	if _, ok := c.LookupWindow("fleet-proj-one"); ok {
+		t.Fatal("expected proj-one gone after kill")
+	}
+}
+
+func TestListWindowsNoWorkspace(t *testing.T) {
+	requireTmux(t)
+	c := New()
+	_ = c.KillWorkspace()
+	ws, err := c.ListWindows()
+	if err != nil {
+		t.Fatalf("expected no error when workspace absent, got %v", err)
+	}
+	if len(ws) != 0 {
+		t.Fatalf("expected 0 windows, got %+v", ws)
+	}
+}
+
 func TestDecorateSetsStatusBar(t *testing.T) {
 	requireTmux(t)
 	c := New()
