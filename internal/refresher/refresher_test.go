@@ -41,6 +41,13 @@ func (f *fakeTmux) SetWindowLabel(target, label string) error {
 	return nil
 }
 
+// Compile-time assertions that the fakes satisfy the ports Build depends on,
+// so drift surfaces here rather than at the Build call site.
+var (
+	_ workspaceTmux = (*fakeTmux)(nil)
+	_ git.Git       = fakeGit{}
+)
+
 func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	base := t.TempDir()
 	cfg := config.Config{ScanRoot: "/code", WorktreeBaseDir: base}

@@ -69,6 +69,8 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 			w, present := windows[wname]
 			alive := present && !w.Dead
 
+			// Pane content only refines live windows; dead/missing windows
+			// classify straight to Exited regardless of tail, so skip capture.
 			var tail string
 			if alive {
 				tail, _ = t.CapturePane(target) // best-effort
