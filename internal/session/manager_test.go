@@ -27,11 +27,14 @@ func (f *fakeGit) RemoveWorktree(_, wt string, _ bool) error {
 	f.removed = append(f.removed, wt)
 	return nil
 }
-func (f *fakeGit) DeleteBranch(_, b string, _ bool) error { f.deleted = append(f.deleted, b); return nil }
-func (f *fakeGit) Status(string) (git.Status, error)      { return f.status, nil }
-func (f *fakeGit) Push(string, string) error              { return nil }
-func (f *fakeGit) IsRepo(string) bool                     { return true }
-func (f *fakeGit) Ignore(string, string) error            { return nil }
+func (f *fakeGit) DeleteBranch(_, b string, _ bool) error {
+	f.deleted = append(f.deleted, b)
+	return nil
+}
+func (f *fakeGit) Status(string) (git.Status, error) { return f.status, nil }
+func (f *fakeGit) Push(string, string) error         { return nil }
+func (f *fakeGit) IsRepo(string) bool                { return true }
+func (f *fakeGit) Ignore(string, string) error       { return nil }
 
 type fakeTmux struct {
 	created   []string // window names created
@@ -119,6 +122,9 @@ func TestDeleteKillsRemovesAndOptionallyDropsBranch(t *testing.T) {
 
 	if err := m.Delete(s, false); err != nil {
 		t.Fatalf("delete: %v", err)
+	}
+	if len(ft.killed) != 1 || ft.killed[0] != "fleet-workspace:fleet-p-s" {
+		t.Fatalf("delete should kill the window target: killed=%v", ft.killed)
 	}
 	if len(fg.removed) != 1 || len(fg.deleted) != 0 {
 		t.Fatalf("expected remove only: removed=%v deleted=%v", fg.removed, fg.deleted)

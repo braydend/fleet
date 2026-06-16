@@ -16,7 +16,10 @@ import (
 const claudeCommand = "claude"
 
 // tmuxPort is the subset of the tmux adapter the manager uses for window-based
-// session lifecycle.
+// session lifecycle. Note the asymmetric addressing: CreateWindow and
+// LookupWindow take a bare window name (the workspace is implied), while
+// KillWindow and RespawnWindow take a full "workspace:name" target as produced
+// by naming.WindowTarget.
 type tmuxPort interface {
 	CreateWindow(name, workdir, command string) (int, error)
 	KillWindow(target string) error
@@ -49,6 +52,8 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 	if err := m.git.AddWorktree(p.Path, wt, branch, base); err != nil {
 		return Session{}, err
 	}
+	// Keep fleet's own .fleet/ bookkeeping out of git status and out of the
+	// user's commits.
 	if err := m.git.Ignore(wt, ".fleet/"); err != nil {
 		return Session{}, err
 	}
