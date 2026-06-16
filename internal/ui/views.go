@@ -5,13 +5,41 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/session"
 )
 
 var (
 	titleStyle    = lipgloss.NewStyle().Bold(true)
 	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	workingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	waitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	idleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	exitedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	projectStyle = lipgloss.NewStyle().Faint(true).Underline(true)
 )
+
+// activityStyle maps a state to its glyph style.
+func activityStyle(s activity.State) lipgloss.Style {
+	switch s {
+	case activity.Working:
+		return workingStyle
+	case activity.Waiting:
+		return waitingStyle
+	case activity.Exited:
+		return exitedStyle
+	default:
+		return idleStyle
+	}
+}
+
+// glyph renders the coloured activity glyph for a session.
+func glyph(s session.Session) string {
+	return activityStyle(s.Activity).Render(s.Activity.Glyph())
+}
 
 // View renders the current state.
 func (m Model) View() string {
@@ -35,31 +63,47 @@ func (m Model) viewDashboard() string {
 	if len(m.sessions) == 0 {
 		b.WriteString(dimStyle.Render("no sessions. press n to create one.") + "\n")
 	}
+
+	lastProject := ""
 	for i, s := range m.sessions {
-		run := "●"
-		if s.Exited {
-			run = "○"
+		if s.Project != lastProject {
+			b.WriteString(projectStyle.Render(s.Project) + "\n")
+			lastProject = s.Project
 		}
-		line := fmt.Sprintf("%s %s/%s  %s", run, s.Project, s.Name, s.Git.Branch)
+
+		// Tab number: the window index, or "-" when there is no live window.
+		num := "-"
+		if s.WindowIndex > 0 {
+			num = fmt.Sprintf("%d", s.WindowIndex)
+		}
+		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, glyph(s), s.Name, s.Branch, s.Base)
+		if i == m.cursor {
+			b.WriteString(selectedStyle.Render("› "+identity) + "\n")
+		} else {
+			b.WriteString("  " + identity + "\n")
+		}
+
+		// Detail line: activity word, git state, age.
+		detail := "    " + s.Activity.Label()
 		if s.Git.Dirty {
-			line += fmt.Sprintf("  ✱%d", s.Git.ChangeCount)
+			detail += fmt.Sprintf(" · ✱%d", s.Git.ChangeCount)
+		} else {
+			detail += " · clean"
 		}
 		if s.Git.Ahead > 0 || s.Git.Behind > 0 {
-			line += fmt.Sprintf("  ↑%d↓%d", s.Git.Ahead, s.Git.Behind)
+			detail += fmt.Sprintf(" · ↑%d↓%d", s.Git.Ahead, s.Git.Behind)
 		}
-		if i == m.cursor {
-			b.WriteString(selectedStyle.Render("› "+line) + "\n")
-		} else {
-			b.WriteString("  " + line + "\n")
-		}
-		// Detail line: worktree path and creation time (spec: project + path +
-		// created-at).
-		detail := "    " + s.WorktreePath
 		if !s.CreatedAt.IsZero() {
 			detail += " · created " + s.CreatedAt.Format("2006-01-02 15:04")
 		}
 		b.WriteString(dimStyle.Render(detail) + "\n")
 	}
+
+	// Legend for the activity glyphs.
+	legend := fmt.Sprintf("legend: %s working  %s waiting  %s idle  %s exited",
+		workingStyle.Render("◉"), waitingStyle.Render("◉"),
+		idleStyle.Render("◉"), exitedStyle.Render("○"))
+	b.WriteString("\n" + dimStyle.Render(legend))
 	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
 	if m.status != "" {
 		b.WriteString("\n" + m.status)
