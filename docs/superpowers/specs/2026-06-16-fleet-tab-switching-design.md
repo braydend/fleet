@@ -52,9 +52,11 @@ Format: `<index> <glyph><project>/<session><dirty?>`, e.g.
 `1 ◉web/login   2 ◉api/fix-bug✱   3 ○cli/refactor`. The active window is
 highlighted. The leading number **is** the keybind.
 
-Because tmux cannot know git/activity state, **fleet owns each window's name**
-and rewrites it on each refresh tick to encode the glyph + label. The tmux
-status format is just `#{window_index} #{window_name}` (with
+Because tmux cannot know git/activity state, **fleet sets a per-window user
+option `@fleet_label`** on each refresh tick to encode the glyph + label (with
+embedded tmux colour codes). The window *name* stays the stable
+`fleet-<project>-<session>` identifier (used for matching and targeting); the
+tmux status format renders `#{window_index} #{@fleet_label}` (with
 `automatic-rename off`).
 
 **Switch keys (prefix-less):**
@@ -128,9 +130,12 @@ Shift from session-level to window-level operations against `fleet-workspace`:
   LastActivity time.Time}` in a single `list-windows -F` call. Replaces the
   per-session `Has`.
 - `CapturePane(target)` → last N lines (for the waiting heuristic).
-- `SetWindowName(target, name)` — used each tick to push the tab label.
-- `AttachWorkspaceCmd(target)` — attach to the workspace selecting a window
-  (for `tea.ExecProcess`).
+- `SetWindowLabel(target, label)` — sets the `@fleet_label` window option each
+  tick to push the tab text; the window name itself stays stable.
+- `LookupWindow(name)` → the matching `Window` (and whether it exists), for
+  resolving a window's current index/dead state by its stable name.
+- `SelectWindow(index)` + `AttachWorkspaceCmd()` — select a window by index then
+  attach to the workspace (for `tea.ExecProcess`).
 - `ConfigureTabs()` — window-status formats + the Alt keybinds, scoped to the
   workspace session. Best-effort.
 
@@ -183,11 +188,11 @@ sessions exist*. For liveness/activity it now:
 
 1. calls `ListWindows()` once and maps each session to its window by name,
 2. runs `CapturePane` per live session and `activity.Classify`,
-3. pushes the computed label back into the window name (`SetWindowName`) so the
-   tab strip reflects current state.
+3. pushes the computed label into the `@fleet_label` window option
+   (`SetWindowLabel`) so the tab strip reflects current state.
 
 The `liveness` interface widens to expose `ListWindows` / `CapturePane` /
-`SetWindowName`. Malformed worktrees are still skipped; capture/label failures
+`SetWindowLabel`. Malformed worktrees are still skipped; capture/label failures
 degrade gracefully.
 
 ### `internal/ui`
