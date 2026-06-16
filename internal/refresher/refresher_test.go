@@ -4,10 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
 	"github.com/bray/fleet/internal/naming"
+	"github.com/bray/fleet/internal/tmux"
 )
 
 type fakeGit struct{ st git.Status }
@@ -21,31 +23,50 @@ func (f fakeGit) Push(string, string) error                { return nil }
 func (f fakeGit) IsRepo(string) bool                       { return true }
 func (f fakeGit) Ignore(string, string) error              { return nil }
 
-type fakeTmux struct{ alive map[string]bool }
+type fakeTmux struct {
+	windows []tmux.Window
+	tails   map[string]string
+	labels  map[string]string // target -> last label set
+}
 
-func (f fakeTmux) Has(name string) bool { return f.alive[name] }
+func (f *fakeTmux) ListWindows() ([]tmux.Window, error) { return f.windows, nil }
+func (f *fakeTmux) CapturePane(target string) (string, error) {
+	return f.tails[target], nil
+}
+func (f *fakeTmux) SetWindowLabel(target, label string) error {
+	if f.labels == nil {
+		f.labels = map[string]string{}
+	}
+	f.labels[target] = label
+	return nil
+}
 
-func TestBuildDerivesSessionsFromDisk(t *testing.T) {
+func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	base := t.TempDir()
 	cfg := config.Config{ScanRoot: "/code", WorktreeBaseDir: base}
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 
-	// One worktree on disk with meta, tmux alive.
-	wtAlive := naming.WorktreePath(base, "My App", "alive")
-	_ = meta.Write(wtAlive, meta.Meta{
+	// Two worktrees: one live & working, one with no window (exited).
+	wtA := naming.WorktreePath(base, "My App", "alive")
+	_ = meta.Write(wtA, meta.Meta{
 		Project: "My App", Session: "alive", Branch: "fleet/alive", Base: "main",
 		RepoPath: "/code/my-app", CreatedAt: time.Unix(1, 0).UTC(),
 	})
-	// One worktree on disk with meta, tmux dead -> Exited.
-	wtDead := naming.WorktreePath(base, "My App", "dead")
-	_ = meta.Write(wtDead, meta.Meta{
+	wtD := naming.WorktreePath(base, "My App", "dead")
+	_ = meta.Write(wtD, meta.Meta{
 		Project: "My App", Session: "dead", Branch: "fleet/dead", Base: "main",
 		RepoPath: "/code/my-app", CreatedAt: time.Unix(2, 0).UTC(),
 	})
 
-	ft := fakeTmux{alive: map[string]bool{naming.TmuxName("My App", "alive"): true}}
+	nameAlive := naming.TmuxName("My App", "alive")
+	ft := &fakeTmux{
+		windows: []tmux.Window{
+			{Index: 1, Name: nameAlive, Dead: false, LastActivity: now.Add(-1 * time.Second)},
+		},
+	}
 	fg := fakeGit{st: git.Status{Branch: "fleet/alive", Dirty: true, ChangeCount: 3}}
 
-	got, err := Build(cfg, ft, fg)
+	got, err := Build(cfg, ft, fg, func() time.Time { return now })
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -53,14 +74,22 @@ func TestBuildDerivesSessionsFromDisk(t *testing.T) {
 		t.Fatalf("expected 2 sessions, got %d: %+v", len(got), got)
 	}
 
-	byName := map[string]bool{}
 	for _, s := range got {
-		byName[s.Name] = s.Alive
-		if s.Name == "alive" && (!s.Alive || s.Exited) {
-			t.Fatalf("alive session wrong flags: %+v", s)
+		switch s.Name {
+		case "alive":
+			if !s.Alive || s.Exited || s.Activity != activity.Working || s.WindowIndex != 1 {
+				t.Fatalf("alive session wrong: %+v", s)
+			}
+		case "dead":
+			if s.Alive || !s.Exited || s.Activity != activity.Exited {
+				t.Fatalf("dead session wrong: %+v", s)
+			}
 		}
-		if s.Name == "dead" && (s.Alive || !s.Exited) {
-			t.Fatalf("dead session wrong flags: %+v", s)
-		}
+	}
+
+	// The live session should have had its tab label pushed.
+	target := naming.WindowTarget("My App", "alive")
+	if ft.labels[target] == "" {
+		t.Fatalf("expected a label set for %q, got %v", target, ft.labels)
 	}
 }
