@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bray/fleet/internal/git"
+	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/session"
 )
 
@@ -50,5 +51,53 @@ func TestErrorMsgSetsStatus(t *testing.T) {
 	updated, _ := m.Update(errorMsg{err: errSample})
 	if got := updated.(Model).status; got == "" {
 		t.Fatal("expected status to be set on error")
+	}
+}
+
+func TestNKeyOpensProjectPicker(t *testing.T) {
+	called := false
+	a := Actions{Projects: func() ([]projects.Project, error) {
+		called = true
+		return []projects.Project{{Name: "app", Path: "/code/app", DefaultBranch: "main"}}, nil
+	}}
+	m := New(&a, nil)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	// The command loads projects; run it and feed the result back.
+	if cmd == nil {
+		t.Fatal("expected a command to load projects")
+	}
+	msg := cmd()
+	updated, _ = updated.(Model).Update(msg)
+	mm := updated.(Model)
+	if !called {
+		t.Fatal("expected Projects action to be called")
+	}
+	if mm.state != stateProjectPicker || len(mm.projects) != 1 {
+		t.Fatalf("expected project picker with 1 project, got state=%v n=%d", mm.state, len(mm.projects))
+	}
+}
+
+func TestFormSubmitCallsCreate(t *testing.T) {
+	var gotName, gotBranch, gotBase string
+	a := Actions{Create: func(p projects.Project, name, branch, base string) error {
+		gotName, gotBranch, gotBase = name, branch, base
+		return nil
+	}}
+	m := New(&a, nil)
+	m.state = stateNewSession
+	m.form = newSessionForm{
+		project:     projects.Project{Name: "app", Path: "/code/app", DefaultBranch: "main"},
+		sessionName: "fix",
+		branch:      "fleet/fix",
+		base:        "main",
+		field:       fieldBase, // last field; enter submits
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected create command")
+	}
+	_ = cmd() // execute create
+	if gotName != "fix" || gotBranch != "fleet/fix" || gotBase != "main" {
+		t.Fatalf("create got name=%q branch=%q base=%q", gotName, gotBranch, gotBase)
 	}
 }

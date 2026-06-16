@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/session"
 )
 
@@ -31,3 +32,5 @@ func refresh(fn func() ([]session.Session, error)) tea.Cmd {
 func tick() tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
+
+type projectsLoadedMsg struct{ projects []projects.Project }
