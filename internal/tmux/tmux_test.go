@@ -128,6 +128,48 @@ func TestWorkspaceWindowLifecycle(t *testing.T) {
 	}
 }
 
+func TestAttachWorkspaceCmdShape(t *testing.T) {
+	c := New()
+	cmd := c.AttachWorkspaceCmd()
+	if cmd.Args[0] != "tmux" || cmd.Args[1] != "attach" {
+		t.Fatalf("unexpected attach command: %v", cmd.Args)
+	}
+	found := false
+	for _, a := range cmd.Args {
+		if a == "fleet-workspace" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected attach to target fleet-workspace: %v", cmd.Args)
+	}
+}
+
+func TestConfigureTabsAndSelect(t *testing.T) {
+	requireTmux(t)
+	c := New()
+	_ = c.KillWorkspace()
+	if _, err := c.CreateWindow("fleet-proj-one", t.TempDir(), "sleep 30"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	t.Cleanup(func() { _ = c.KillWorkspace() })
+
+	if err := c.ConfigureTabs(); err != nil {
+		t.Fatalf("configure tabs: %v", err)
+	}
+	// window-status-format should reference our label option.
+	out, err := exec.Command("tmux", "show-options", "-t", "fleet-workspace", "-v", "window-status-format").Output()
+	if err != nil {
+		t.Fatalf("show-options: %v", err)
+	}
+	if !strings.Contains(string(out), "@fleet_label") {
+		t.Fatalf("window-status-format = %q, expected to reference @fleet_label", out)
+	}
+	if err := c.SelectWindow(1); err != nil {
+		t.Fatalf("select window: %v", err)
+	}
+}
+
 func TestListWindowsNoWorkspace(t *testing.T) {
 	requireTmux(t)
 	c := New()

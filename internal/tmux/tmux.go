@@ -263,6 +263,55 @@ func (c *CLI) SetWindowLabel(target, label string) error {
 	return err
 }
 
+// SelectWindow makes the given 1-based window index active in the workspace.
+func (c *CLI) SelectWindow(index int) error {
+	_, err := c.tmux("select-window", "-t", fmt.Sprintf("%s:%d", workspace, index))
+	return err
+}
+
+// AttachWorkspaceCmd returns the command to attach to the shared workspace, for
+// use with tea.ExecProcess. Select the target window first via SelectWindow.
+func (c *CLI) AttachWorkspaceCmd() *exec.Cmd {
+	return exec.Command("tmux", "attach", "-t", workspace)
+}
+
+// ConfigureTabs sets the workspace status bar to render windows as numbered
+// tabs (using each window's @fleet_label) and binds prefix-less switch keys:
+// Alt-1..9 jump to a tab, Alt-Left/Right move prev/next. Best-effort; it
+// returns the first error encountered.
+func (c *CLI) ConfigureTabs() error {
+	prefix := c.prefixKey()
+	opts := [][]string{
+		{"set-option", "-t", workspace, "status", "on"},
+		{"set-option", "-t", workspace, "status-style", "bg=colour237,fg=colour250"},
+		{"set-option", "-t", workspace, "status-left", " #[bold]fleet#[nobold] "},
+		{"set-option", "-t", workspace, "status-left-length", "20"},
+		{"set-option", "-t", workspace, "status-right", fmt.Sprintf(" %s d → dashboard ", prefix)},
+		{"set-option", "-t", workspace, "status-right-length", "40"},
+		{"set-option", "-t", workspace, "window-status-format", " #{window_index} #{@fleet_label} "},
+		{"set-option", "-t", workspace, "window-status-current-format", "#[reverse] #{window_index} #{@fleet_label} #[noreverse]"},
+	}
+	for _, o := range opts {
+		if _, err := c.tmux(o...); err != nil {
+			return err
+		}
+	}
+	// Prefix-less switch keys (global to this tmux server; fleet owns it).
+	for i := 1; i <= 9; i++ {
+		n := strconv.Itoa(i)
+		if _, err := c.tmux("bind-key", "-n", "M-"+n, "select-window", "-t", ":"+n); err != nil {
+			return err
+		}
+	}
+	if _, err := c.tmux("bind-key", "-n", "M-Left", "previous-window"); err != nil {
+		return err
+	}
+	if _, err := c.tmux("bind-key", "-n", "M-Right", "next-window"); err != nil {
+		return err
+	}
+	return nil
+}
+
 // humanizeKey turns a tmux key name (e.g. "C-b", "M-x") into a friendlier label.
 func humanizeKey(k string) string {
 	switch {
