@@ -40,3 +40,29 @@ func TestGlyphAndColor(t *testing.T) {
 		t.Fatal("expected non-empty tmux colors for working/waiting")
 	}
 }
+
+func TestStateRendering(t *testing.T) {
+	cases := []struct {
+		state State
+		glyph string
+		label string
+	}{
+		{Idle, "◉", "idle"},
+		{Working, "◉", "working"},
+		{Waiting, "◉", "waiting for input"},
+		{Exited, "○", "exited"},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			if got := c.state.Glyph(); got != c.glyph {
+				t.Errorf("Glyph = %q, want %q", got, c.glyph)
+			}
+			if got := c.state.Label(); got != c.label {
+				t.Errorf("Label = %q, want %q", got, c.label)
+			}
+			if got := c.state.TmuxColor(); got == "" {
+				t.Errorf("TmuxColor = empty, want non-empty")
+			}
+		})
+	}
+}

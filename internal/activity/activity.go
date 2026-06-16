@@ -21,7 +21,8 @@ const (
 	Exited               // the process is gone (or no window exists)
 )
 
-// workingWindow is how recently output must have happened to count as "working".
+// workingWindow is how recently output must have happened to count as
+// "working": output seen within this window is treated as in-progress.
 const workingWindow = 5 * time.Second
 
 // promptMarkers are substrings that indicate Claude is waiting for input.
@@ -49,12 +50,16 @@ func Classify(lastActivity, now time.Time, paneTail string, missing, dead bool) 
 	return Idle
 }
 
-// Glyph returns the single-rune indicator for the state.
+// Glyph returns the single-rune indicator for the state. Only Exited gets a
+// distinct (hollow) glyph; live states share a filled glyph and are
+// distinguished by TmuxColor.
 func (s State) Glyph() string {
-	if s == Exited {
+	switch s {
+	case Exited:
 		return "○"
+	default:
+		return "◉"
 	}
-	return "◉"
 }
 
 // TmuxColor returns a tmux colour name for the state (for status-bar labels).
