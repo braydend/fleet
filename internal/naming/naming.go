@@ -10,6 +10,10 @@ import (
 
 const prefix = "fleet"
 
+// Workspace is the single shared tmux session that holds one window per fleet
+// session. Windows-as-tabs live here.
+const Workspace = "fleet-workspace"
+
 // Sanitize replaces every rune that is not [a-zA-Z0-9_] with "_".
 func Sanitize(s string) string {
 	var b strings.Builder
@@ -37,6 +41,12 @@ func ParseTmuxName(name string) (project, session string, ok bool) {
 		return "", "", false
 	}
 	return parts[1], parts[2], true
+}
+
+// WindowTarget returns the tmux target ("session:window") addressing a
+// project/session's window inside the shared workspace.
+func WindowTarget(project, session string) string {
+	return Workspace + ":" + TmuxName(project, session)
 }
 
 // WorktreePath returns the on-disk worktree directory for a project/session.
