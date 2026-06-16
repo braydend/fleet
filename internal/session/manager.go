@@ -77,3 +77,51 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		Alive:        true,
 	}, nil
 }
+
+// Kill terminates the tmux session (ignoring "no such session").
+func (m *Manager) Kill(s Session) error {
+	return m.tmux.Kill(s.TmuxName)
+}
+
+// Leave ends the running Claude instance but keeps the worktree and branch.
+func (m *Manager) Leave(s Session) error {
+	_ = m.tmux.Kill(s.TmuxName) // ignore: session may already be gone
+	return nil
+}
+
+// Delete kills the tmux session, removes the worktree, and optionally deletes
+// the branch. The worktree removal is forced because the caller has already
+// confirmed any dirty/unpushed state.
+func (m *Manager) Delete(s Session, deleteBranch bool) error {
+	_ = m.tmux.Kill(s.TmuxName)
+	if err := m.git.RemoveWorktree(s.RepoPath, s.WorktreePath, true); err != nil {
+		return err
+	}
+	if deleteBranch {
+		if err := m.git.DeleteBranch(s.RepoPath, s.Branch, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// PushPR pushes the branch and, if a forge is configured and available, opens a
+// pull request.
+func (m *Manager) PushPR(s Session) error {
+	if err := m.git.Push(s.WorktreePath, s.Branch); err != nil {
+		return err
+	}
+	if m.forge != nil && m.forge.Available() {
+		return m.forge.OpenPR(s.WorktreePath)
+	}
+	return nil
+}
+
+// AttachCmd returns the command to attach to the session's tmux, for use with
+// tea.ExecProcess. Requires the tmux port to also implement attacher.
+func (m *Manager) AttachCmd(s Session) *exec.Cmd {
+	if a, ok := m.tmux.(attacher); ok {
+		return a.AttachCmd(s.TmuxName)
+	}
+	return exec.Command("tmux", "attach", "-t", s.TmuxName)
+}

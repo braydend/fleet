@@ -86,3 +86,37 @@ func TestCreateAddsWorktreeMetaAndTmux(t *testing.T) {
 	}
 	_ = cfg
 }
+
+func TestLeaveKillsTmuxOnly(t *testing.T) {
+	fg := &fakeGit{}
+	ft := &fakeTmux{}
+	m, _ := newManager(t, fg, ft)
+	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
+	if err := m.Leave(s); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	if len(ft.killed) != 1 || len(fg.removed) != 0 {
+		t.Fatalf("leave should kill tmux only: killed=%v removed=%v", ft.killed, fg.removed)
+	}
+}
+
+func TestDeleteKillsRemovesAndOptionallyDropsBranch(t *testing.T) {
+	fg := &fakeGit{}
+	ft := &fakeTmux{}
+	m, _ := newManager(t, fg, ft)
+	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
+
+	if err := m.Delete(s, false); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if len(fg.removed) != 1 || len(fg.deleted) != 0 {
+		t.Fatalf("expected remove only: removed=%v deleted=%v", fg.removed, fg.deleted)
+	}
+
+	if err := m.Delete(s, true); err != nil {
+		t.Fatalf("delete+branch: %v", err)
+	}
+	if len(fg.deleted) != 1 || fg.deleted[0] != "fleet/s" {
+		t.Fatalf("expected branch delete, got %v", fg.deleted)
+	}
+}
