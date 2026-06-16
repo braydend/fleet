@@ -13,6 +13,12 @@ import (
 type Config struct {
 	ScanRoot        string `yaml:"scan_root"`
 	WorktreeBaseDir string `yaml:"worktree_base_dir"`
+	// TmuxSocket is the tmux server socket fleet runs on (`tmux -L <socket>`).
+	// It defaults to "fleet" so fleet is isolated from the user's personal tmux
+	// server — nothing fleet does (options, keybindings, kill-session) can touch
+	// the default server, and vice versa. Set it to "" to use the default tmux
+	// server instead (the pre-isolation behaviour).
+	TmuxSocket string `yaml:"tmux_socket"`
 }
 
 // DefaultPath returns the conventional config file location.
@@ -26,6 +32,7 @@ func Default() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
 		WorktreeBaseDir: filepath.Join(home, ".local", "share", "fleet", "worktrees"),
+		TmuxSocket:      "fleet",
 	}
 }
 

@@ -27,13 +27,31 @@ type Tmux interface {
 }
 
 // CLI implements Tmux by shelling out to the tmux binary.
-type CLI struct{}
+//
+// socket, when non-empty, pins every tmux invocation to a dedicated server via
+// `tmux -L <socket>`. Production uses the empty default (the user's server);
+// tests MUST use a private socket so their destructive operations (KillWorkspace
+// etc.) can never reach the user's real sessions — see issue #5.
+type CLI struct{ socket string }
 
-// New returns a CLI tmux adapter.
+// New returns a CLI tmux adapter on the default tmux server.
 func New() *CLI { return &CLI{} }
 
+// NewWithSocket returns a CLI pinned to a private tmux server (`tmux -L
+// socket`). Used by tests for isolation.
+func NewWithSocket(socket string) *CLI { return &CLI{socket: socket} }
+
+// withSocket prepends the `-L <socket>` server flag when this CLI is pinned to a
+// private socket; otherwise it returns args unchanged.
+func (c *CLI) withSocket(args ...string) []string {
+	if c.socket == "" {
+		return args
+	}
+	return append([]string{"-L", c.socket}, args...)
+}
+
 func (c *CLI) tmux(args ...string) (string, error) {
-	cmd := exec.Command("tmux", args...)
+	cmd := exec.Command("tmux", c.withSocket(args...)...)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -89,7 +107,7 @@ func (c *CLI) Has(name string) bool {
 // AttachCmd returns the command to attach to a session. The caller runs it via
 // tea.ExecProcess so the TUI suspends while attached.
 func (c *CLI) AttachCmd(name string) *exec.Cmd {
-	return exec.Command("tmux", "attach", "-t", name)
+	return exec.Command("tmux", c.withSocket("attach", "-t", name)...)
 }
 
 // Decorate configures a small status bar on the session (scoped to that session
@@ -133,8 +151,8 @@ func (c *CLI) prefixKey() string {
 // Window is one window in the shared fleet workspace session.
 type Window struct {
 	Index        int
-	Name         string    // stable identity: the fleet-<proj>-<sess> name
-	Dead         bool      // process exited but window kept by remain-on-exit
+	Name         string // stable identity: the fleet-<proj>-<sess> name
+	Dead         bool   // process exited but window kept by remain-on-exit
 	LastActivity time.Time
 }
 
@@ -157,6 +175,73 @@ func (c *CLI) KillWorkspace() error {
 	return err
 }
 
+// configureWorkspace applies the session- and server-scoped options fleet
+// relies on. It is idempotent and MUST run whether or not fleet created the
+// session this run: tmux sessions persist across fleet restarts, so a workspace
+// that already exists would otherwise keep tmux's defaults.
+//
+// exit-empty (a server option) is turned off so a momentarily-empty workspace
+// can never make the whole tmux server exit and tear down every session at once
+// — a key part of the issue #5 crash.
+func (c *CLI) configureWorkspace() error {
+	for _, opt := range [][]string{
+		{"set-option", "-s", "exit-empty", "off"},
+		{"set-option", "-t", workspace, "base-index", "1"},
+		{"set-option", "-t", workspace, "renumber-windows", "on"},
+	} {
+		if _, err := c.tmux(opt...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// configureWindow applies the per-window options fleet relies on to the window
+// at target ("workspace:index"). These MUST be set at window scope: in modern
+// tmux remain-on-exit/automatic-rename are pane/window options, and a
+// session-scoped set is silently ineffective for the window's pane.
+//
+// remain-on-exit keeps the window as a dead pane when its process exits, instead
+// of letting the window vanish (which, for the last window, destroys the session
+// and bounces the attached user to the dashboard — the issue #5 crash).
+// automatic-rename off keeps the fleet-<proj>-<sess> name stable for lookups and
+// tab labels.
+func (c *CLI) configureWindow(target string) error {
+	for _, opt := range [][]string{
+		{"set-option", "-w", "-t", target, "remain-on-exit", "on"},
+		{"set-option", "-w", "-t", target, "automatic-rename", "off"},
+	} {
+		if _, err := c.tmux(opt...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// EnsureConfigured (re)applies fleet's workspace and per-window options to an
+// existing workspace. It is safe to call on every attach: it is idempotent and a
+// no-op when the workspace does not exist. This protects workspaces that fleet
+// did not create this run (they survive restarts) and retro-fits options onto
+// windows created before this configuration existed.
+func (c *CLI) EnsureConfigured() error {
+	if !c.hasSession(workspace) {
+		return nil
+	}
+	if err := c.configureWorkspace(); err != nil {
+		return err
+	}
+	ws, err := c.ListWindows()
+	if err != nil {
+		return err
+	}
+	for _, w := range ws {
+		if err := c.configureWindow(fmt.Sprintf("%s:%d", workspace, w.Index)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CreateWindow ensures the workspace exists and adds a window named name
 // running command in workdir. Returns the new window's 1-based index.
 func (c *CLI) CreateWindow(name, workdir, command string) (int, error) {
@@ -164,15 +249,8 @@ func (c *CLI) CreateWindow(name, workdir, command string) (int, error) {
 		if _, err := c.tmux("new-session", "-d", "-s", workspace, "-n", name, "-c", workdir, command); err != nil {
 			return 0, err
 		}
-		for _, opt := range [][]string{
-			{"set-option", "-t", workspace, "base-index", "1"},
-			{"set-option", "-t", workspace, "renumber-windows", "on"},
-			{"set-option", "-t", workspace, "automatic-rename", "off"},
-			{"set-option", "-t", workspace, "remain-on-exit", "on"},
-		} {
-			if _, err := c.tmux(opt...); err != nil {
-				return 0, err
-			}
+		if err := c.configureWorkspace(); err != nil {
+			return 0, err
 		}
 		// Renumber so windows start at base-index (1), regardless of the user's
 		// global base-index. The single bootstrap window becomes index 1, so
@@ -180,13 +258,25 @@ func (c *CLI) CreateWindow(name, workdir, command string) (int, error) {
 		if _, err := c.tmux("move-window", "-r", "-t", workspace); err != nil {
 			return 0, err
 		}
+		if err := c.configureWindow(fmt.Sprintf("%s:1", workspace)); err != nil {
+			return 0, err
+		}
 		return 1, nil
+	}
+	// The workspace already exists (e.g. it survived a previous fleet run).
+	// Re-apply session/server config so options like exit-empty are present even
+	// though we didn't create the session this run.
+	if err := c.configureWorkspace(); err != nil {
+		return 0, err
 	}
 	out, err := c.tmux("new-window", "-P", "-F", "#{window_index}", "-t", workspace, "-n", name, "-c", workdir, command)
 	if err != nil {
 		return 0, err
 	}
 	idx, _ := strconv.Atoi(strings.TrimSpace(out))
+	if err := c.configureWindow(fmt.Sprintf("%s:%d", workspace, idx)); err != nil {
+		return 0, err
+	}
 	return idx, nil
 }
 
@@ -199,6 +289,8 @@ func (c *CLI) ListWindows() ([]Window, error) {
 		msg := err.Error()
 		if strings.Contains(msg, "no server running") ||
 			strings.Contains(msg, "can't find session") ||
+			strings.Contains(msg, "no current target") ||
+			strings.Contains(msg, "error connecting to") || // named socket, server not started yet
 			strings.Contains(msg, "no sessions") {
 			return nil, nil
 		}
@@ -272,7 +364,7 @@ func (c *CLI) SelectWindow(index int) error {
 // AttachWorkspaceCmd returns the command to attach to the shared workspace, for
 // use with tea.ExecProcess. Select the target window first via SelectWindow.
 func (c *CLI) AttachWorkspaceCmd() *exec.Cmd {
-	return exec.Command("tmux", "attach", "-t", workspace)
+	return exec.Command("tmux", c.withSocket("attach", "-t", workspace)...)
 }
 
 // ConfigureTabs sets the workspace status bar to render windows as numbered

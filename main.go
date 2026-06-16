@@ -51,7 +51,10 @@ func run() error {
 	}
 
 	g := git.New()
-	tm := tmux.New()
+	// Run on fleet's own tmux server (default socket "fleet") so fleet is fully
+	// isolated from the user's personal tmux — see config.TmuxSocket. An empty
+	// socket falls back to the default tmux server.
+	tm := tmux.NewWithSocket(cfg.TmuxSocket)
 	fg := forge.New()
 	mgr := session.NewManager(cfg, tm, g, fg, time.Now)
 
@@ -73,6 +76,11 @@ func run() error {
 			if err := mgr.EnsureRunning(s); err != nil {
 				return func() tea.Msg { return ui.ErrorMsgFor(err) }
 			}
+			// (Re)apply fleet's workspace options every attach — most importantly
+			// exit-empty off and per-window remain-on-exit — so a workspace that
+			// survived a previous run (or predates this config) can't tear the
+			// server down when a window's process exits. See issue #5.
+			_ = tm.EnsureConfigured()
 			// Configure the tab strip + switch keys (best-effort).
 			_ = tm.ConfigureTabs()
 			// Resolve the current index by name (it may have been renumbered) and
