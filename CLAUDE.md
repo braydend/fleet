@@ -93,6 +93,52 @@ Explicitly **future** (do not build yet): activity/attention detection,
 config-registered projects, alternate worktree layouts, session history, bulk
 actions, embedded PTY panes.
 
+## Development workflow (hard rules)
+
+These rules are **mandatory**, not advisory. They exist so that every change
+leaves behind durable design documentation that future agentic workers can
+read to understand *why* the code looks the way it does. The artefacts under
+`docs/superpowers/` are treated as the authoritative historical record of the
+project's design decisions.
+
+### 1. Every feature request follows the superpowers spec → plan flow
+
+No feature work begins without documentation. For **every** feature request,
+regardless of size:
+
+1. **Brainstorm** the intent and requirements (superpowers `brainstorming`
+   skill) before designing.
+2. Write a **design spec** in `docs/superpowers/specs/` named
+   `YYYY-MM-DD-<short-name>-design.md`.
+3. Write an **implementation plan** in `docs/superpowers/plans/` named
+   `YYYY-MM-DD-<short-name>.md`. The plan must reference its spec and the
+   CLAUDE.md conventions, and use checkbox (`- [ ]`) task syntax.
+
+Both a spec **and** a plan are required for every feature — never one without
+the other. These follow the same format as the existing artefacts in those
+directories; match their structure (Goal / Background / Status header, etc.).
+
+### 2. GitHub issues are a valid entrypoint — and must be linked
+
+A GitHub issue may be the entrypoint for a feature **or** a bug fix. When
+addressing an issue:
+
+- Still produce the spec + plan artefacts described above and check them in.
+- **Link bidirectionally:** the spec/plan header must cite the issue
+  (e.g. `**Issue:** #12`), and a comment must be posted back on the issue
+  linking to the committed spec/plan paths. Use `gh` for issue interaction.
+- Bug fixes that are genuinely trivial (one-line, no design choice) still need
+  a plan documenting the fix and the issue link; a full design spec is at your
+  discretion only when there is no design decision to record — when in doubt,
+  write both.
+
+### 3. Artefacts are checked in with the work
+
+The spec and plan must be committed within the **same PR** as the
+implementation (commit order is flexible). A PR that changes behaviour without
+its accompanying superpowers documentation is incomplete and should not be
+merged.
+
 ## Working conventions
 
 - **TDD:** write tests before implementation (project follows the superpowers
