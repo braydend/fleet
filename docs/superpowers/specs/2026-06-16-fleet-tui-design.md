@@ -40,7 +40,7 @@ dashboard.
 | Session execution model | tmux-backed sessions (one tmux session per Claude instance) |
 | Project discovery | Scan a configured root directory for git repos |
 | Worktree location | Central dir per project: `<worktreeBaseDir>/<project>/<session>` |
-| Branching | User chooses per session: default base = repo default branch, default branch name = `fleet/<session>` |
+| Branching | User chooses per session: default base = repo default branch, default branch name = the (sanitized) session name |
 | State management | Approach C — tmux + git authoritative for live state; small per-worktree `.fleet/meta.json` for facts they can't infer |
 | Cleanup options | Delete worktree+branch / push+open PR / leave for manual handling |
 
@@ -112,7 +112,7 @@ the worktree is removed the metadata goes with it — no reconciliation needed.
 
 1. Dashboard → `n` → project picker (from `projects` scan).
 2. New-session form: session name; base branch (default = project default
-   branch); branch name (default = `fleet/<session>`).
+   branch); branch name (default = the sanitized session name).
 3. `git` adds a worktree at `<worktreeBaseDir>/<project>/<session>` on the new
    branch off the chosen base.
 4. `meta` writes `.fleet/meta.json`.

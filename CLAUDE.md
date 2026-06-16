@@ -61,7 +61,7 @@ leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
 - **Worktree location:** central dir per project —
   `<worktreeBaseDir>/<project>/<session>`.
 - **Branching:** user chooses per session; default base = repo default branch,
-  default branch name = `fleet/<session>`.
+  default branch name = the (sanitized) session name.
 - **State management (approach C):** tmux + git are authoritative for live
   state (liveness, branch, dirty/ahead/behind). A small per-worktree
   `.fleet/meta.json` holds only what they can't infer (base branch, created-at,

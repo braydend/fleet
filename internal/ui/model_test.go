@@ -102,11 +102,12 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 	m := New(&a, nil)
 	m.state = stateNewSession
 	m.form = newSessionForm{
-		project:     projects.Project{Name: "app", Path: "/code/app", DefaultBranch: "main"},
-		sessionName: "fix",
-		branch:      "fleet/fix",
-		base:        "main",
-		field:       fieldBase, // last field; enter submits
+		project:       projects.Project{Name: "app", Path: "/code/app", DefaultBranch: "main"},
+		sessionName:   "fix",
+		branch:        "fleet/fix",
+		branchTouched: true, // user typed an explicit branch
+		base:          "main",
+		field:         fieldBase, // last field; enter submits
 	}
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -115,6 +116,53 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 	_ = cmd() // execute create
 	if gotName != "fix" || gotBranch != "fleet/fix" || gotBase != "main" {
 		t.Fatalf("create got name=%q branch=%q base=%q", gotName, gotBranch, gotBase)
+	}
+}
+
+func TestBranchDefaultsToSessionName(t *testing.T) {
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	f.sessionName = "fix bug"
+	f.syncBranchDefault()
+	if f.branch != "fix_bug" {
+		t.Fatalf("branch = %q, want %q (session name, sanitized, no prefix)", f.branch, "fix_bug")
+	}
+}
+
+// Regression: typing the session name one rune at a time must keep the branch
+// tracking the *whole* name, not just the first character.
+func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
+	m := New(nil, nil)
+	m.state = stateNewSession
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	for _, r := range "fix" {
+		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = next.(Model)
+	}
+	if m.form.sessionName != "fix" {
+		t.Fatalf("sessionName = %q, want %q", m.form.sessionName, "fix")
+	}
+	if m.form.branch != "fix" {
+		t.Fatalf("branch = %q, want %q (should track the full session name)", m.form.branch, "fix")
+	}
+}
+
+// Once the user edits the branch field directly, it must stop auto-tracking the
+// session name.
+func TestEditedBranchStopsTrackingSessionName(t *testing.T) {
+	m := New(nil, nil)
+	m.state = stateNewSession
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form.field = fieldBranch
+	for _, r := range "custom" {
+		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = next.(Model)
+	}
+	// Switch to the session field and type; branch must not be overwritten.
+	m.form.field = fieldSession
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = next.(Model)
+	if m.form.branch != "custom" {
+		t.Fatalf("branch = %q, want %q (user edit must persist)", m.form.branch, "custom")
 	}
 }
 
