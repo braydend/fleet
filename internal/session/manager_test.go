@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
@@ -143,5 +144,16 @@ func TestEnsureRunningRecreatesWhenDead(t *testing.T) {
 	}
 	if len(ft.created) != 1 || ft.created[0] != "fleet-p-s" {
 		t.Fatalf("expected tmux recreate for a dead session, got %v", ft.created)
+	}
+}
+
+func TestSessionHasActivityFields(t *testing.T) {
+	s := Session{
+		Activity:     activity.Working,
+		LastActivity: time.Unix(5, 0),
+		WindowIndex:  2,
+	}
+	if s.Activity != activity.Working || s.WindowIndex != 2 {
+		t.Fatalf("unexpected session fields: %+v", s)
 	}
 }

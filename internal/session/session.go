@@ -4,6 +4,7 @@ package session
 import (
 	"time"
 
+	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/git"
 )
 
@@ -15,9 +16,12 @@ type Session struct {
 	Base         string
 	RepoPath     string
 	WorktreePath string
-	TmuxName     string
+	TmuxName     string // the stable window name inside the workspace
 	CreatedAt    time.Time
-	Alive        bool // tmux session currently exists
-	Exited       bool // worktree exists but tmux session is gone
+	Alive        bool // window exists and process is running
+	Exited       bool // worktree exists but window is missing or dead
+	Activity     activity.State
+	LastActivity time.Time
+	WindowIndex  int // 1-based tab number; 0 if no live window
 	Git          git.Status
 }
