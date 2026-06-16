@@ -52,6 +52,13 @@ func (m Model) viewDashboard() string {
 		} else {
 			b.WriteString("  " + line + "\n")
 		}
+		// Detail line: worktree path and creation time (spec: project + path +
+		// created-at).
+		detail := "    " + s.WorktreePath
+		if !s.CreatedAt.IsZero() {
+			detail += " · created " + s.CreatedAt.Format("2006-01-02 15:04")
+		}
+		b.WriteString(dimStyle.Render(detail) + "\n")
 	}
 	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
 	if m.status != "" {

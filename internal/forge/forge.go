@@ -2,8 +2,11 @@
 package forge
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 )
 
 var errNotFound = errors.New("gh not found")
@@ -32,9 +35,19 @@ func (g *GH) Available() bool {
 	return err == nil
 }
 
-// OpenPR runs `gh pr create --fill` in the worktree, pushing if needed.
+// OpenPR runs `gh pr create --fill` in the worktree. On failure it wraps gh's
+// stderr so the reason (e.g. "a pull request already exists") reaches the UI.
 func (g *GH) OpenPR(worktreePath string) error {
 	cmd := exec.Command("gh", "pr", "create", "--fill")
 	cmd.Dir = worktreePath
-	return cmd.Run()
+	var errb bytes.Buffer
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if msg == "" {
+			return err
+		}
+		return fmt.Errorf("gh pr create: %w: %s", err, msg)
+	}
+	return nil
 }

@@ -100,9 +100,11 @@ func (c *CLI) IsRepo(path string) bool {
 	return err == nil
 }
 
-// Ignore adds pattern to the worktree's git exclude file (info/exclude in the
-// common git dir) so fleet's own bookkeeping (e.g. ".fleet/") never shows up as
-// an untracked change or gets accidentally staged. It is idempotent.
+// Ignore adds pattern to the repo's info/exclude (resolved via the common git
+// dir, so it applies to the repo and all its worktrees) so fleet's own
+// bookkeeping (e.g. ".fleet/") never shows up as an untracked change or gets
+// accidentally staged. It is idempotent. ".fleet/" only ever exists inside fleet
+// worktrees, so excluding it repo-wide is harmless.
 func (c *CLI) Ignore(worktreePath, pattern string) error {
 	commonDir, err := c.git(worktreePath, "rev-parse", "--git-common-dir")
 	if err != nil {
