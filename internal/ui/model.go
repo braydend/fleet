@@ -74,11 +74,16 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case sessionsUpdatedMsg:
+		// A refresh may arrive on the periodic tick while the user is in the
+		// project picker, new-session form, or a cleanup menu. Update the list
+		// in the background without changing the current screen — flows that
+		// should return to the dashboard set the state themselves.
 		m.sessions = msg.sessions
-		if m.cursor >= len(m.sessions) {
+		// Only the dashboard uses cursor to index sessions; don't disturb the
+		// selection on other screens (the picker indexes projects).
+		if m.state == stateDashboard && m.cursor >= len(m.sessions) {
 			m.cursor = max(0, len(m.sessions)-1)
 		}
-		m.state = stateDashboard
 		return m, nil
 
 	case errorMsg:
@@ -190,6 +195,9 @@ func (m Model) keyNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.form.field++
 			return m, nil
 		}
+		// Close the form and return to the dashboard; the create runs in the
+		// background and a refresh will populate the new session.
+		m.state = stateDashboard
 		return m, m.submitForm()
 	default:
 		if len(msg.Runes) > 0 {

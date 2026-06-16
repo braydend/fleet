@@ -161,3 +161,47 @@ func TestDeleteDirtyRequiresConfirm(t *testing.T) {
 		t.Fatal("expected confirm state for dirty delete")
 	}
 }
+
+func TestRefreshDoesNotLeaveProjectPicker(t *testing.T) {
+	m := New(nil, nil)
+	m.state = stateProjectPicker
+	m.projects = []projects.Project{{Name: "app"}}
+	// A periodic refresh completing must not yank the user back to the dashboard.
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	mm := updated.(Model)
+	if mm.state != stateProjectPicker {
+		t.Fatalf("expected to stay in project picker, got state %v", mm.state)
+	}
+	if len(mm.sessions) != 2 {
+		t.Fatalf("expected sessions to still update in the background, got %d", len(mm.sessions))
+	}
+}
+
+func TestRefreshDoesNotLeaveNewSessionForm(t *testing.T) {
+	m := New(nil, nil)
+	m.state = stateNewSession
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	if updated.(Model).state != stateNewSession {
+		t.Fatal("expected to stay in the new-session form during a background refresh")
+	}
+}
+
+func TestFormSubmitReturnsToDashboard(t *testing.T) {
+	a := Actions{Create: func(projects.Project, string, string, string) error { return nil }}
+	m := New(&a, nil)
+	m.state = stateNewSession
+	m.form = newSessionForm{
+		project:     projects.Project{Name: "app", DefaultBranch: "main"},
+		sessionName: "fix",
+		branch:      "fleet/fix",
+		base:        "main",
+		field:       fieldBase,
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if updated.(Model).state != stateDashboard {
+		t.Fatal("expected form submit to return to the dashboard")
+	}
+	if cmd == nil {
+		t.Fatal("expected a create command")
+	}
+}
