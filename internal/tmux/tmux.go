@@ -369,11 +369,15 @@ func (c *CLI) AttachWorkspaceCmd() *exec.Cmd {
 
 // ConfigureTabs sets the workspace status bar to render windows as numbered
 // tabs (using each window's @fleet_label) and binds prefix-less switch keys:
-// Alt-1..9 jump to a tab, Alt-Left/Right move prev/next. Best-effort; it
-// returns the first error encountered.
+// Alt-1..9 jump to a tab, Alt-Left/Right move prev/next. It also enables mouse
+// mode so the wheel scrolls scrollback. Best-effort; it returns the first error
+// encountered.
 func (c *CLI) ConfigureTabs() error {
 	prefix := c.prefixKey()
 	opts := [][]string{
+		// Mouse mode on: the wheel scrolls tmux scrollback instead of being
+		// forwarded to the inner program as arrow keys (issue #2).
+		{"set-option", "-t", workspace, "mouse", "on"},
 		{"set-option", "-t", workspace, "status", "on"},
 		{"set-option", "-t", workspace, "status-style", "bg=colour237,fg=colour250"},
 		{"set-option", "-t", workspace, "status-left", " #[bold]fleet#[nobold] "},

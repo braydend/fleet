@@ -297,6 +297,11 @@ func TestConfigureTabsAndSelect(t *testing.T) {
 	if !strings.Contains(string(out), "@fleet_label") {
 		t.Fatalf("window-status-format = %q, expected to reference @fleet_label", out)
 	}
+	// Mouse mode must be on so the wheel scrolls scrollback instead of
+	// cycling the inner program's prompt history (issue #2).
+	if got := strings.TrimSpace(string(tmuxOn(t, c, "show-options", "-t", "fleet-workspace", "-v", "mouse"))); got != "on" {
+		t.Fatalf("mouse = %q, expected \"on\"", got)
+	}
 	if err := c.SelectWindow(1); err != nil {
 		t.Fatalf("select window: %v", err)
 	}
