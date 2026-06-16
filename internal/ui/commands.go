@@ -34,3 +34,8 @@ func tick() tea.Cmd {
 }
 
 type projectsLoadedMsg struct{ projects []projects.Project }
+
+// ErrorMsgFor and SessionsMsgFor let main construct the messages the attach
+// callback returns.
+func ErrorMsgFor(err error) tea.Msg             { return errorMsg{err: err} }
+func SessionsMsgFor(s []session.Session) tea.Msg { return sessionsUpdatedMsg{sessions: s} }
