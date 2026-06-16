@@ -60,7 +60,13 @@ the build directory. During development you can also run it directly with
 
 ## Configuration
 
-`fleet` reads `~/.config/fleet/config.yaml`. Create it before first run:
+`fleet` reads `~/.config/fleet/config.yaml`.
+
+**First run:** if the file doesn't exist, `fleet` prompts you for the directory
+to scan for git projects and writes the config for you (using the default
+worktree location). You don't have to create it by hand.
+
+To configure it manually instead, create the file yourself:
 
 ```yaml
 # Directory scanned (one level deep) for git repositories to offer as projects.
@@ -70,17 +76,18 @@ scan_root: /home/you/code
 worktree_base_dir: /home/you/.local/share/fleet/worktrees
 ```
 
-- `scan_root` is **required**.
+- `scan_root` is **required** (the first-run prompt collects it; it must be an
+  existing directory).
 - `worktree_base_dir` defaults to `~/.local/share/fleet/worktrees` if omitted.
 
 ## Getting started
 
 1. Make sure `git`, `tmux`, and `claude` are installed and on your `PATH`.
-2. Write `~/.config/fleet/config.yaml` with a `scan_root` (see above).
-3. Run `fleet` (or `go run .`).
-4. Press `n`, pick a project, name the session, accept or edit the base/branch,
+2. Run `fleet` (or `go run .`). On first run it prompts for your `scan_root` and
+   writes `~/.config/fleet/config.yaml` for you.
+3. Press `n`, pick a project, name the session, accept or edit the base/branch,
    and submit. A new session appears on the dashboard.
-5. Select it and press `Enter` to attach — you're now in a live Claude Code
+4. Select it and press `Enter` to attach — you're now in a live Claude Code
    session running in an isolated worktree. Detach with tmux's `Ctrl-b d` to
    return to the dashboard.
 

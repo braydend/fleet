@@ -34,7 +34,15 @@ func run() error {
 		}
 	}
 
-	cfg, err := config.Load(config.DefaultPath())
+	cfgPath := config.DefaultPath()
+	var cfg config.Config
+	var err error
+	if config.Exists(cfgPath) {
+		cfg, err = config.Load(cfgPath)
+	} else {
+		// First run: prompt for the scan root and write the config file.
+		cfg, err = config.Setup(cfgPath, os.Stdin, os.Stdout)
+	}
 	if err != nil {
 		return err
 	}

@@ -25,8 +25,9 @@ leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
 - Test: `go test ./...` (git/tmux integration tests skip if those binaries are
   absent). A build-tagged real-CLI smoke test lives in `internal/refresher`:
   `go test -tags smoke -run Smoke ./internal/refresher/`.
-- Run: `go run .` — requires `git`, `tmux`, and `claude` on PATH and a config
-  file with `scan_root`.
+- Run: `go run .` — requires `git`, `tmux`, and `claude` on PATH. On first run
+  (no config file) it prompts for `scan_root` and writes the config; thereafter
+  it loads `~/.config/fleet/config.yaml`.
 - Config (`~/.config/fleet/config.yaml`):
   ```yaml
   scan_root: /home/you/code
