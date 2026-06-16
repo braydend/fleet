@@ -186,3 +186,20 @@ Per session, at a glance:
 - Session history / archive; reopen a past session.
 - Bulk actions (clean up all merged, kill all in a project).
 - Embedded PTY panes as an alternative to `tmux attach`.
+
+## Known follow-ups (from MVP code review)
+
+Tracked, not blocking the MVP:
+
+- **Keep-branch cleanup option.** `Manager.Delete` already takes a
+  `deleteBranch bool`, but the UI hardcodes `true`. Add a UI choice to delete
+  the worktree while keeping the branch.
+- **`git.DefaultBranch` detached-HEAD fallback.** When `origin/HEAD` is absent
+  and HEAD is detached, the fallback returns the literal `HEAD`. Guard against
+  using that as a base branch (e.g. detect `main`/`master`).
+- **Idempotent push/PR.** `Manager.PushPR` re-runs `gh pr create` even when a PR
+  already exists; detect "already exists" and treat as a no-op rather than
+  surfacing an error.
+- **Wire up or remove `tmux.List` / `naming.ParseTmuxName`.** The refresher
+  derives state from worktrees-on-disk (approach C), so these are currently
+  unused by production paths. Keep as intentional hooks or remove.
