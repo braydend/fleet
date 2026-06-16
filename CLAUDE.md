@@ -13,7 +13,25 @@ Full design: [`docs/superpowers/specs/2026-06-16-fleet-tui-design.md`](docs/supe
 
 ## Status
 
-Pre-implementation. Design approved; implementation plan not yet written.
+MVP implemented. Core loop works: scan projects → create session (worktree +
+tmux + meta) → attach/detach → live dashboard → cleanup (delete / push+PR /
+leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
+`scan_root` set). Implementation plan:
+`docs/superpowers/plans/2026-06-16-fleet-tui.md`.
+
+## Build & run
+
+- Build: `go build ./...` (or `go build -o fleet .`)
+- Test: `go test ./...` (git/tmux integration tests skip if those binaries are
+  absent). A build-tagged real-CLI smoke test lives in `internal/refresher`:
+  `go test -tags smoke -run Smoke ./internal/refresher/`.
+- Run: `go run .` — requires `git`, `tmux`, and `claude` on PATH and a config
+  file with `scan_root`.
+- Config (`~/.config/fleet/config.yaml`):
+  ```yaml
+  scan_root: /home/you/code
+  worktree_base_dir: /home/you/.local/share/fleet/worktrees
+  ```
 
 ## Tech stack
 
