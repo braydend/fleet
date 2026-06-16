@@ -70,6 +70,11 @@ func run() error {
 		Leave:  mgr.Leave,
 		PushPR: mgr.PushPR,
 		Attach: func(s session.Session) tea.Cmd {
+			// If the session has exited (e.g. claude was quit with Ctrl-D),
+			// restart it before attaching so it can still be opened.
+			if err := mgr.EnsureRunning(s); err != nil {
+				return func() tea.Msg { return ui.ErrorMsgFor(err) }
+			}
 			return tea.ExecProcess(mgr.AttachCmd(s), func(err error) tea.Msg {
 				// After detaching, refresh the list.
 				ss, rerr := refresher.Build(cfg, tm, g)

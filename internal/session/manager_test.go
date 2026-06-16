@@ -121,3 +121,27 @@ func TestDeleteKillsRemovesAndOptionallyDropsBranch(t *testing.T) {
 		t.Fatalf("expected branch delete, got %v", fg.deleted)
 	}
 }
+
+func TestEnsureRunningNoopWhenAlive(t *testing.T) {
+	ft := &fakeTmux{alive: map[string]bool{"fleet-p-s": true}}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt"}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if len(ft.created) != 0 {
+		t.Fatalf("expected no tmux create for a live session, got %v", ft.created)
+	}
+}
+
+func TestEnsureRunningRecreatesWhenDead(t *testing.T) {
+	ft := &fakeTmux{}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{TmuxName: "fleet-p-s", WorktreePath: "/wt"}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if len(ft.created) != 1 || ft.created[0] != "fleet-p-s" {
+		t.Fatalf("expected tmux recreate for a dead session, got %v", ft.created)
+	}
+}

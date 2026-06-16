@@ -12,6 +12,9 @@ import (
 	"github.com/bray/fleet/internal/projects"
 )
 
+// claudeCommand is the command launched inside each session's tmux session.
+const claudeCommand = "claude"
+
 // tmuxPort is the subset of tmux.Tmux the manager uses for lifecycle ops.
 // AttachCmd is exposed separately so tests can supply a fake without os/exec.
 type tmuxPort interface {
@@ -67,7 +70,7 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		return Session{}, err
 	}
 	tname := naming.TmuxName(p.Name, name)
-	if err := m.tmux.Create(tname, wt, "claude"); err != nil {
+	if err := m.tmux.Create(tname, wt, claudeCommand); err != nil {
 		return Session{}, err
 	}
 	return Session{
@@ -86,6 +89,17 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 // Kill terminates the tmux session (ignoring "no such session").
 func (m *Manager) Kill(s Session) error {
 	return m.tmux.Kill(s.TmuxName)
+}
+
+// EnsureRunning makes sure the session's tmux session exists, recreating it (and
+// relaunching claude in the existing worktree) if it has exited — e.g. because
+// claude was quit with Ctrl-D. It is a no-op when the session is already alive,
+// so it is safe to call right before attaching.
+func (m *Manager) EnsureRunning(s Session) error {
+	if m.tmux.Has(s.TmuxName) {
+		return nil
+	}
+	return m.tmux.Create(s.TmuxName, s.WorktreePath, claudeCommand)
 }
 
 // Leave ends the running Claude instance but keeps the worktree and branch.
