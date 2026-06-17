@@ -490,6 +490,9 @@ func TestDashboardFooterShowsDevVersion(t *testing.T) {
 	if !strings.Contains(out, "q quit · dev") {
 		t.Fatalf("footer should show dev version.\n---\n%s", out)
 	}
+	if strings.Contains(out, "vdev") {
+		t.Fatalf("dev build must not be shown with a v prefix.\n---\n%s", out)
+	}
 }
 
 func TestDashboardFooterOmitsEmptyVersion(t *testing.T) {
