@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/braydend/fleet/compare/v0.2.0...v0.3.0) (2026-06-17)
+
+
+### Features
+
+* **selfupdate:** add minio/selfupdate adapter for binary swap ([65c96fb](https://github.com/braydend/fleet/commit/65c96fb4f777dda56a67aeb9f8665e0d5da52bcc))
+* **selfupdate:** add semver comparison helpers ([4a49c0b](https://github.com/braydend/fleet/commit/4a49c0b12f3ee0a120b73f195c4f6344d19cc565))
+* **selfupdate:** add throttle state for check timing ([cca6d4e](https://github.com/braydend/fleet/commit/cca6d4e2bdc2888eb24c543e9d98d731e013b18b))
+* **selfupdate:** extract fleet binary from release archive ([d65aaad](https://github.com/braydend/fleet/commit/d65aaad6cde1d801d578b0bba096366561148e05))
+* **selfupdate:** in-place self-update from GitHub Releases ([#21](https://github.com/braydend/fleet/issues/21)) ([1f74380](https://github.com/braydend/fleet/commit/1f74380f3ee2c1a9b2d13137e7036c6f07a1c5ac))
+* **selfupdate:** orchestrate download, verify, and binary swap ([3c71450](https://github.com/braydend/fleet/commit/3c714504a38980757632ded0eef519f9088c59d5))
+* **selfupdate:** query GitHub latest release and compare versions ([32c5edc](https://github.com/braydend/fleet/commit/32c5edc2b8b980610a691947e3c8254700e16003))
+* **selfupdate:** select platform asset and verify checksum ([a830381](https://github.com/braydend/fleet/commit/a83038171567c9bc404e3a915f80583a87a393a5))
+* **selfupdate:** wire throttled update check and apply into main ([4e000d3](https://github.com/braydend/fleet/commit/4e000d3bc18137b5a717712932f59b159553958d))
+* **ui:** add versionLabel helper for dashboard version ([2aa7868](https://github.com/braydend/fleet/commit/2aa78680444d0becedcdc3a3cd72671556e52cf8))
+* **ui:** render update banner and confirm dialog ([ab10259](https://github.com/braydend/fleet/commit/ab10259be456c91130cbb7de4560c9e73c95b2df))
+* **ui:** show running version in dashboard footer ([55830db](https://github.com/braydend/fleet/commit/55830dbf4492e0a72ed517d9b42cf6b9fa196ba8))
+* **ui:** wire self-update check, confirm, and apply flow ([2f2af1f](https://github.com/braydend/fleet/commit/2f2af1f7e3fe5a25f3ce6ea7c5c256632c5ab2a1))
+
+
+### Bug Fixes
+
+* **selfupdate:** map swap-time permission errors to manual-install hint ([b8e26e3](https://github.com/braydend/fleet/commit/b8e26e396e0caed12b3631077364a4a8c6243980))
+
 ## [0.2.0](https://github.com/braydend/fleet/compare/v0.1.1...v0.2.0) (2026-06-17)
 
 
