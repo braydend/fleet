@@ -471,10 +471,16 @@ line, confirmation for destructive actions).
 Run: `grep -c 'CONTRIBUTING.md' CLAUDE.md && grep -E '^## (Core design decisions|Planned package layout|MVP scope)' CLAUDE.md`
 Expected: at least 3 `CONTRIBUTING.md` references; the architecture sections still present.
 
-- [ ] **Step 5: Confirm the moved rule text is gone from CLAUDE.md**
+- [ ] **Step 5: Confirm the detailed rule text is gone from CLAUDE.md**
 
-Run: `grep -c 'Conventional Commits' CLAUDE.md`
-Expected: `0` (the detailed Conventional Commits rules now live only in CONTRIBUTING.md; the pointer text doesn't repeat the phrase).
+The pointer paragraphs legitimately name "Conventional Commits" once as a
+reference, so the count is `1`, not `0`. What must be gone is the *detailed*
+ruleset — the `feat:`/`fix:`/`BREAKING CHANGE:` bump semantics that now live only
+in `CONTRIBUTING.md`.
+
+Run: `grep -E 'feat: \.\.\.|BREAKING CHANGE' CLAUDE.md`
+Expected: no matches (the detailed Conventional Commits semantics are no longer
+duplicated in CLAUDE.md; only the single pointer reference remains).
 
 - [ ] **Step 6: Commit**
 
