@@ -3,6 +3,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/refresher"
+	"github.com/bray/fleet/internal/selfupdate"
 	"github.com/bray/fleet/internal/session"
 	"github.com/bray/fleet/internal/tmux"
 	"github.com/bray/fleet/internal/ui"
@@ -84,6 +86,10 @@ func run() error {
 	// socket falls back to the default tmux server.
 	tm := tmux.NewWithSocket(cfg.TmuxSocket)
 	fg := forge.New()
+	const repo = "braydend/fleet"
+	statePath := selfupdate.StatePath()
+	checker := selfupdate.Checker{Repo: repo, Client: http.DefaultClient}
+	applier := selfupdate.Applier{Client: http.DefaultClient, Updater: selfupdate.MinioUpdater{}}
 	mgr := session.NewManager(cfg, tm, g, fg, time.Now)
 
 	actions := ui.Actions{
@@ -100,6 +106,26 @@ func run() error {
 		Delete: mgr.Delete,
 		Leave:  mgr.Leave,
 		PushPR: mgr.PushPR,
+		CheckUpdate: func() (selfupdate.CheckResult, error) {
+			st := selfupdate.LoadState(statePath)
+			if !st.Due(time.Now()) {
+				return selfupdate.CheckResult{}, nil // throttled: no network
+			}
+			res, err := checker.Check(version)
+			// Record the attempt regardless of outcome so a hard-down network
+			// doesn't cause a tight retry loop.
+			_ = selfupdate.SaveState(statePath, selfupdate.State{LastChecked: time.Now()})
+			return res, err
+		},
+		ApplyUpdate: func(rel selfupdate.Release) error {
+			if err := applier.Apply(rel); err != nil {
+				if selfupdate.IsPermission(err) {
+					return fmt.Errorf("can't replace binary (permission denied) — %s", selfupdate.ManualInstallHint())
+				}
+				return err
+			}
+			return nil
+		},
 		Attach: func(s session.Session) tea.Cmd {
 			if err := mgr.EnsureRunning(s); err != nil {
 				return func() tea.Msg { return ui.ErrorMsgFor(err) }
