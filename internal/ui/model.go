@@ -2,10 +2,13 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bray/fleet/internal/projects"
+	"github.com/bray/fleet/internal/selfupdate"
 	"github.com/bray/fleet/internal/session"
 )
 
@@ -17,6 +20,7 @@ const (
 	stateNewSession
 	stateCleanupMenu
 	stateConfirm
+	stateUpdateConfirm
 )
 
 type cleanupChoice int
@@ -30,13 +34,15 @@ const (
 
 // Actions the model needs from the rest of the app, injected for testability.
 type Actions struct {
-	Refresh  func() ([]session.Session, error)
-	Projects func() ([]projects.Project, error)
-	Create   func(p projects.Project, name, branch, base string) error
-	Delete   func(s session.Session, deleteBranch bool) error
-	Leave    func(s session.Session) error
-	PushPR   func(s session.Session) error
-	Attach   func(s session.Session) tea.Cmd
+	Refresh     func() ([]session.Session, error)
+	Projects    func() ([]projects.Project, error)
+	Create      func(p projects.Project, name, branch, base string) error
+	Delete      func(s session.Session, deleteBranch bool) error
+	Leave       func(s session.Session) error
+	PushPR      func(s session.Session) error
+	Attach      func(s session.Session) tea.Cmd
+	CheckUpdate func() (selfupdate.CheckResult, error)
+	ApplyUpdate func(selfupdate.Release) error
 }
 
 // Model is the root Bubble Tea model.
@@ -45,7 +51,10 @@ type Model struct {
 	state    state
 	sessions []session.Session
 	cursor   int
-	status string
+	status   string
+
+	// version is the build version shown in the dashboard footer.
+	version string
 
 	// spinner animates the glyph beside working sessions (decorative only).
 	spinner spinner.Model
@@ -57,11 +66,16 @@ type Model struct {
 	// cleanup sub-state
 	cleanupChoice cleanupChoice
 	pendingDelete session.Session // awaiting confirm
+
+	// self-update sub-state
+	updateAvailable bool
+	updateRelease   selfupdate.Release
+	updateLatest    string
 }
 
-// New builds a Model. actions may be the zero value in tests; refreshFn is the
-// initial-load function (usually actions.Refresh).
-func New(actions *Actions, _ any) Model {
+// New builds a Model. actions may be the zero value in tests; version is the
+// build version string shown in the dashboard footer ("" hides it).
+func New(actions *Actions, version string) Model {
 	var a Actions
 	if actions != nil {
 		a = *actions
@@ -69,12 +83,13 @@ func New(actions *Actions, _ any) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
 	sp.Style = spinnerStyle
-	return Model{actions: a, state: stateDashboard, spinner: sp}
+	return Model{actions: a, state: stateDashboard, spinner: sp, version: version}
 }
 
-// Init kicks off the first refresh and the tick loop.
+// Init kicks off the first refresh, the tick loop, and the update check.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(refresh(m.actions.Refresh), tick(), m.spinner.Tick)
+	return tea.Batch(refresh(m.actions.Refresh), tick(), m.spinner.Tick,
+		checkUpdate(m.actions.CheckUpdate), scheduleUpdateCheck())
 }
 
 // Update is the reducer.
@@ -113,6 +128,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case updateAvailableMsg:
+		if msg.res.Available {
+			m.updateAvailable = true
+			m.updateRelease = msg.res.Release
+			m.updateLatest = msg.res.Latest
+		}
+		return m, nil
+
+	case updateAppliedMsg:
+		m.updateAvailable = false
+		m.status = fmt.Sprintf("✓ updated to v%s — restart fleet to apply", msg.version)
+		return m, nil
+
+	case updateTickMsg:
+		return m, tea.Batch(checkUpdate(m.actions.CheckUpdate), scheduleUpdateCheck())
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -129,6 +160,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyCleanupMenu(msg)
 	case stateConfirm:
 		return m.keyConfirm(msg)
+	case stateUpdateConfirm:
+		return m.keyUpdateConfirm(msg)
 	default:
 		return m.keyDashboard(msg)
 	}
@@ -158,6 +191,10 @@ func (m Model) keyDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if _, ok := m.selected(); ok {
 			m.state = stateCleanupMenu
 			m.cleanupChoice = cleanupDelete
+		}
+	case "u":
+		if m.updateAvailable {
+			m.state = stateUpdateConfirm
 		}
 	}
 	return m, nil
@@ -293,6 +330,18 @@ func (m Model) keyConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		s := m.pendingDelete
 		m.state = stateDashboard
 		return m, m.runThenRefresh(func() error { return m.callDelete(s) })
+	case "n", "esc":
+		m.state = stateDashboard
+	}
+	return m, nil
+}
+
+func (m Model) keyUpdateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		rel := m.updateRelease
+		m.state = stateDashboard
+		return m, applyUpdate(m.actions.ApplyUpdate, rel)
 	case "n", "esc":
 		m.state = stateDashboard
 	}

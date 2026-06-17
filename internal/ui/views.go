@@ -9,6 +9,19 @@ import (
 	"github.com/bray/fleet/internal/activity"
 )
 
+// versionLabel formats the build version for display. A dev/local build shows
+// "dev" verbatim; a real release X shows "vX"; an empty version shows nothing.
+func versionLabel(v string) string {
+	switch v {
+	case "":
+		return ""
+	case "dev":
+		return "dev"
+	default:
+		return "v" + v
+	}
+}
+
 // View renders the current state.
 func (m Model) View() string {
 	switch m.state {
@@ -20,6 +33,8 @@ func (m Model) View() string {
 		return m.viewCleanupMenu()
 	case stateConfirm:
 		return m.viewConfirm()
+	case stateUpdateConfirm:
+		return m.viewUpdateConfirm()
 	default:
 		return m.viewDashboard()
 	}
@@ -109,7 +124,15 @@ func (m Model) viewDashboard() string {
 		activityIcon(activity.Working), activityIcon(activity.Waiting),
 		activityIcon(activity.Idle), activityIcon(activity.Exited))
 	b.WriteString("\n" + dimStyle.Render(legend))
-	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
+	if m.updateAvailable {
+		banner := fmt.Sprintf("⬆ update available: v%s → press u to update", m.updateLatest)
+		b.WriteString("\n" + warnStyle.Render(banner))
+	}
+	footer := "n new · enter attach · d cleanup · r refresh · q quit"
+	if label := versionLabel(m.version); label != "" {
+		footer += " · " + label
+	}
+	b.WriteString("\n" + dimStyle.Render(footer))
 	if m.status != "" {
 		b.WriteString("\n" + m.status)
 	}
@@ -152,4 +175,10 @@ func (m Model) viewConfirm() string {
 	return warnStyle.Render("⚠️  confirm delete") + "\n\n" +
 		fmt.Sprintf("%s/%s has uncommitted or unpushed changes.\n", s.Project, s.Name) +
 		"Delete worktree and branch anyway? " + dimStyle.Render("(y/n)")
+}
+
+func (m Model) viewUpdateConfirm() string {
+	return warnStyle.Render("⬆ update fleet") + "\n\n" +
+		fmt.Sprintf("A new version is available: v%s.\n", m.updateLatest) +
+		"Download and replace the running binary now? " + dimStyle.Render("(y/n)")
 }
