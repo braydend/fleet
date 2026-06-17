@@ -4,13 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bray/fleet/internal/session"
+	"github.com/bray/fleet/internal/activity"
 )
-
-// glyph renders the coloured activity glyph for a session.
-func glyph(s session.Session) string {
-	return activityStyle(s.Activity).Render(s.Activity.Glyph())
-}
 
 // View renders the current state.
 func (m Model) View() string {
@@ -52,7 +47,7 @@ func (m Model) viewDashboard() string {
 		if s.WindowIndex > 0 {
 			num = fmt.Sprintf("%d", s.WindowIndex)
 		}
-		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, glyph(s), s.Name, s.Branch, s.Base)
+		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, activityIcon(s.Activity), s.Name, s.Branch, s.Base)
 		if i == m.cursor {
 			b.WriteString(selectedStyle.Render("› "+identity) + "\n")
 		} else {
@@ -77,8 +72,8 @@ func (m Model) viewDashboard() string {
 
 	// Legend for the activity glyphs.
 	legend := fmt.Sprintf("legend: %s working  %s waiting  %s idle  %s exited",
-		workingStyle.Render("◉"), waitingStyle.Render("◉"),
-		idleStyle.Render("◉"), exitedStyle.Render("○"))
+		activityIcon(activity.Working), activityIcon(activity.Waiting),
+		activityIcon(activity.Idle), activityIcon(activity.Exited))
 	b.WriteString("\n" + dimStyle.Render(legend))
 	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
 	if m.status != "" {

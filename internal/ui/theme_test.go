@@ -1,6 +1,10 @@
 package ui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/bray/fleet/internal/activity"
+)
 
 func TestPaletteIsAdaptive(t *testing.T) {
 	cases := []struct {
@@ -19,6 +23,23 @@ func TestPaletteIsAdaptive(t *testing.T) {
 		if c.gotLight != c.light || c.gotDark != c.dark {
 			t.Errorf("%s = {Light:%q Dark:%q}, want {Light:%q Dark:%q}",
 				c.name, c.gotLight, c.gotDark, c.light, c.dark)
+		}
+	}
+}
+
+func TestActivityIcon(t *testing.T) {
+	cases := []struct {
+		state activity.State
+		want  string
+	}{
+		{activity.Working, "🟢"},
+		{activity.Waiting, "🟡"},
+		{activity.Idle, "💤"},
+		{activity.Exited, "⚫"},
+	}
+	for _, c := range cases {
+		if got := activityIcon(c.state); got != c.want {
+			t.Errorf("activityIcon(%v) = %q, want %q", c.state, got, c.want)
 		}
 	}
 }

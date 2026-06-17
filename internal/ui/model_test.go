@@ -31,7 +31,7 @@ func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 
-	for _, want := range []string{"app", "fleet/a", "← main", "1", "working", "exited", "legend"} {
+	for _, want := range []string{"app", "fleet/a", "← main", "1", "working", "exited", "legend", "🟢", "⚫"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("dashboard view missing %q.\n---\n%s", want, out)
 		}

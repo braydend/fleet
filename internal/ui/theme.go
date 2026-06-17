@@ -47,3 +47,18 @@ func activityStyle(s activity.State) lipgloss.Style {
 		return idleStyle
 	}
 }
+
+// activityIcon returns the emoji shown for a session's state. Emoji are used
+// for every state (not just some) so the 2-cell width keeps columns aligned.
+func activityIcon(s activity.State) string {
+	switch s {
+	case activity.Working:
+		return "🟢"
+	case activity.Waiting:
+		return "🟡"
+	case activity.Exited:
+		return "⚫"
+	default: // Idle
+		return "💤"
+	}
+}
