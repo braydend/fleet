@@ -97,6 +97,10 @@ worktree_base_dir: /home/you/.local/share/fleet/worktrees
 | `↑`/`k`, `↓`/`j` | move selection |
 | `q` / `Ctrl-c` | quit |
 
+**While attached**: a small status bar at the bottom shows which session you're
+in and the key to detach and return to the dashboard (`<prefix> d`, e.g.
+`Ctrl-b d`).
+
 **Project picker / cleanup menu**: `↑`/`↓` to move, `Enter` to choose, `Esc` to cancel.
 
 **New-session form**: `Tab`/`Shift-Tab` (or `↑`/`↓`) to move between fields, type
