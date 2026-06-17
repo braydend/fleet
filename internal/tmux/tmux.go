@@ -370,8 +370,11 @@ func (c *CLI) AttachWorkspaceCmd() *exec.Cmd {
 // ConfigureTabs sets the workspace status bar to render windows as numbered
 // tabs (using each window's @fleet_label) and binds prefix-less switch keys:
 // Alt-1..9 jump to a tab, Alt-Left/Right move prev/next. It also enables mouse
-// mode so the wheel scrolls scrollback. Best-effort; it returns the first error
-// encountered.
+// mode so the wheel scrolls scrollback (issue #2) and rebinds mouse paste/copy
+// to the system clipboard so mouse mode doesn't break paste (issue #14). The
+// status bar advertises Shift+right-click, the always-available terminal-native
+// paste bypass that works even without a clipboard CLI installed (issue #14).
+// Best-effort; it returns the first error encountered.
 func (c *CLI) ConfigureTabs() error {
 	prefix := c.prefixKey()
 	opts := [][]string{
@@ -382,8 +385,8 @@ func (c *CLI) ConfigureTabs() error {
 		{"set-option", "-t", workspace, "status-style", "bg=colour237,fg=colour250"},
 		{"set-option", "-t", workspace, "status-left", " #[bold]fleet#[nobold] "},
 		{"set-option", "-t", workspace, "status-left-length", "20"},
-		{"set-option", "-t", workspace, "status-right", fmt.Sprintf(" %s d → dashboard ", prefix)},
-		{"set-option", "-t", workspace, "status-right-length", "40"},
+		{"set-option", "-t", workspace, "status-right", fmt.Sprintf(" Shift+RightClick paste · %s d → dashboard ", prefix)},
+		{"set-option", "-t", workspace, "status-right-length", "60"},
 		{"set-option", "-t", workspace, "window-status-format", " #{window_index} #{@fleet_label} "},
 		{"set-option", "-t", workspace, "window-status-current-format", "#[reverse] #{window_index} #{@fleet_label} #[noreverse]"},
 	}
@@ -404,6 +407,85 @@ func (c *CLI) ConfigureTabs() error {
 	}
 	if _, err := c.tmux("bind-key", "-n", "M-Right", "next-window"); err != nil {
 		return err
+	}
+	// Mouse mode (above) makes the terminal forward clicks to tmux, which breaks
+	// native right-click/middle-click paste; rebind them to the system clipboard
+	// so paste keeps working (issue #14).
+	return c.bindMouseClipboard()
+}
+
+// clipboardTool describes how to read and write the system clipboard via an
+// external CLI. fleet binds tmux's mouse paste/copy to these so paste works
+// even with mouse mode on (issue #14): once mouse reporting is enabled the
+// terminal forwards clicks to tmux instead of pasting natively, so tmux has to
+// perform the paste itself by shelling out to the clipboard tool.
+type clipboardTool struct {
+	copy         string // shell command reading stdin into the clipboard
+	paste        string // shell command writing the clipboard to stdout
+	pastePrimary string // shell command writing the primary selection to stdout
+}
+
+// detectClipboard returns the first available clipboard helper, preferring
+// Wayland (wl-clipboard), then X11 (xclip, xsel), then macOS (pbcopy/pbpaste).
+// ok is false when none is on PATH — fleet then leaves mouse paste unbound, and
+// wheel-scroll plus terminal-level Ctrl+Shift+V keep working regardless. look
+// is injected (exec.LookPath in production) so the choice is unit-testable.
+func detectClipboard(look func(string) (string, error)) (clipboardTool, bool) {
+	has := func(bin string) bool { _, err := look(bin); return err == nil }
+	switch {
+	case has("wl-copy") && has("wl-paste"):
+		return clipboardTool{
+			copy:         "wl-copy",
+			paste:        "wl-paste --no-newline",
+			pastePrimary: "wl-paste --no-newline --primary",
+		}, true
+	case has("xclip"):
+		return clipboardTool{
+			copy:         "xclip -selection clipboard -in",
+			paste:        "xclip -selection clipboard -out",
+			pastePrimary: "xclip -selection primary -out",
+		}, true
+	case has("xsel"):
+		return clipboardTool{
+			copy:         "xsel --clipboard --input",
+			paste:        "xsel --clipboard --output",
+			pastePrimary: "xsel --primary --output",
+		}, true
+	case has("pbcopy") && has("pbpaste"):
+		// macOS has no primary selection; middle-click falls back to clipboard.
+		return clipboardTool{copy: "pbcopy", paste: "pbpaste", pastePrimary: "pbpaste"}, true
+	}
+	return clipboardTool{}, false
+}
+
+// bindMouseClipboard rebinds the mouse paste/copy events that mouse mode steals
+// from the terminal (issue #14): right-click pastes the clipboard, middle-click
+// pastes the primary selection, and finishing a drag-select copies into the
+// clipboard. Pastes use `paste-buffer -p` (bracketed) so multi-line text is not
+// auto-submitted by the inner program. It is a no-op when no clipboard CLI is
+// installed. The inner `tmux` calls inherit $TMUX, so they reach fleet's server.
+func (c *CLI) bindMouseClipboard() error {
+	clip, ok := detectClipboard(exec.LookPath)
+	if !ok {
+		return nil
+	}
+	pasteFrom := func(read string) string {
+		return fmt.Sprintf(`tmux set-buffer -- "$(%s)" && tmux paste-buffer -p`, read)
+	}
+	for _, b := range [][]string{
+		{"set-option", "-t", workspace, "set-clipboard", "on"},
+		// Right-click pastes the clipboard, middle-click the primary selection.
+		{"bind-key", "-n", "MouseDown3Pane", "run-shell", pasteFrom(clip.paste)},
+		{"bind-key", "-n", "MouseDown2Pane", "run-shell", pasteFrom(clip.pastePrimary)},
+		// Finishing a drag-select copies into the clipboard. copy-pipe is a
+		// copy-mode command, so it must be bound in the copy-mode key tables
+		// (emacs and vi) via send-keys -X, not the root table.
+		{"bind-key", "-T", "copy-mode", "MouseDragEnd1Pane", "send-keys", "-X", "copy-pipe-and-cancel", clip.copy},
+		{"bind-key", "-T", "copy-mode-vi", "MouseDragEnd1Pane", "send-keys", "-X", "copy-pipe-and-cancel", clip.copy},
+	} {
+		if _, err := c.tmux(b...); err != nil {
+			return err
+		}
 	}
 	return nil
 }

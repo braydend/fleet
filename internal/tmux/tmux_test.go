@@ -102,6 +102,56 @@ func TestAttachCmdShape(t *testing.T) {
 	}
 }
 
+func TestDetectClipboard(t *testing.T) {
+	// look returns a stub exec.LookPath that "finds" only the named binaries.
+	look := func(have ...string) func(string) (string, error) {
+		set := map[string]bool{}
+		for _, h := range have {
+			set[h] = true
+		}
+		return func(bin string) (string, error) {
+			if set[bin] {
+				return "/usr/bin/" + bin, nil
+			}
+			return "", exec.ErrNotFound
+		}
+	}
+
+	t.Run("prefers wayland when wl-clipboard present", func(t *testing.T) {
+		c, ok := detectClipboard(look("wl-copy", "wl-paste", "xclip", "xsel"))
+		if !ok {
+			t.Fatal("expected a clipboard tool")
+		}
+		if !strings.Contains(c.copy, "wl-copy") || !strings.Contains(c.paste, "wl-paste") {
+			t.Fatalf("expected wl-clipboard, got %+v", c)
+		}
+		if !strings.Contains(c.pastePrimary, "primary") {
+			t.Fatalf("expected a primary-selection paste, got %q", c.pastePrimary)
+		}
+	})
+
+	t.Run("falls back to xclip then xsel", func(t *testing.T) {
+		if c, _ := detectClipboard(look("xclip", "xsel")); !strings.Contains(c.copy, "xclip") {
+			t.Fatalf("expected xclip preferred over xsel, got %+v", c)
+		}
+		if c, _ := detectClipboard(look("xsel")); !strings.Contains(c.copy, "xsel") {
+			t.Fatalf("expected xsel, got %+v", c)
+		}
+	})
+
+	t.Run("macOS pbcopy/pbpaste", func(t *testing.T) {
+		if c, ok := detectClipboard(look("pbcopy", "pbpaste")); !ok || !strings.Contains(c.paste, "pbpaste") {
+			t.Fatalf("expected pbpaste, got %+v ok=%v", c, ok)
+		}
+	})
+
+	t.Run("none available", func(t *testing.T) {
+		if _, ok := detectClipboard(look()); ok {
+			t.Fatal("expected no clipboard tool when none on PATH")
+		}
+	})
+}
+
 func TestHumanizeKey(t *testing.T) {
 	cases := map[string]string{
 		"C-b": "Ctrl-b",
@@ -301,6 +351,23 @@ func TestConfigureTabsAndSelect(t *testing.T) {
 	// cycling the inner program's prompt history (issue #2).
 	if got := strings.TrimSpace(string(tmuxOn(t, c, "show-options", "-t", "fleet-workspace", "-v", "mouse"))); got != "on" {
 		t.Fatalf("mouse = %q, expected \"on\"", got)
+	}
+	// With mouse on, the terminal forwards clicks to tmux, so native
+	// right-click/middle-click paste no longer fires. fleet rebinds them to
+	// paste from the system clipboard (issue #14) — but only when a clipboard
+	// CLI is installed, so skip the assertion otherwise.
+	if _, ok := detectClipboard(exec.LookPath); ok {
+		out := string(tmuxOn(t, c, "list-keys", "-T", "root", "MouseDown3Pane"))
+		if !strings.Contains(out, "paste-buffer") {
+			t.Fatalf("right-click (MouseDown3Pane) should paste, got %q", out)
+		}
+	}
+	// Because mouse mode grabs normal right-click, native terminal paste needs
+	// Shift held down; the status bar must advertise that bypass so users can
+	// discover it (issue #14).
+	right := strings.TrimSpace(string(tmuxOn(t, c, "show-options", "-t", "fleet-workspace", "-v", "status-right")))
+	if !strings.Contains(right, "Shift") || !strings.Contains(strings.ToLower(right), "paste") {
+		t.Fatalf("status-right = %q, expected a Shift+right-click paste hint", right)
 	}
 	if err := c.SelectWindow(1); err != nil {
 		t.Fatalf("select window: %v", err)
