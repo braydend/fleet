@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/braydend/fleet/compare/v0.1.0...v0.1.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **tmux:** restore paste with mouse mode on ([#14](https://github.com/braydend/fleet/issues/14)) ([54676ef](https://github.com/braydend/fleet/commit/54676efcbaa5f5836634a9f71e7c6462288e70b3))
+* **tmux:** restore paste with mouse mode on ([#14](https://github.com/braydend/fleet/issues/14)) ([543e607](https://github.com/braydend/fleet/commit/543e6074073d1bdd63e0a2604697f419dafccf36))
+
 ## 0.1.0 (2026-06-16)
 
 
