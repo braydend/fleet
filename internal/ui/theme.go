@@ -95,3 +95,38 @@ func gradientTitle(s string) string {
 	}
 	return b.String()
 }
+
+// projectBox draws a rounded box around a project's session lines, with the
+// label embedded in the top border. innerWidth is the visible cell width each
+// content line is padded to (uniform across boxes; computed by the caller).
+// Border glyphs use projectColor; the label uses projectStyle. Widths are
+// measured with lipgloss.Width so ANSI escapes and 2-cell emoji are counted
+// correctly.
+func projectBox(label string, lines []string, innerWidth int) string {
+	border := lipgloss.NewStyle().Foreground(projectColor)
+	span := innerWidth + 2 // content area + one space of padding each side
+
+	dashes := span - lipgloss.Width(" "+label+" ")
+	if dashes < 0 {
+		dashes = 0
+	}
+
+	var b strings.Builder
+	// Top: ╭ <label> <dashes>╮
+	b.WriteString(border.Render("╭ "))
+	b.WriteString(projectStyle.Render(label))
+	b.WriteString(border.Render(" " + strings.Repeat("─", dashes) + "╮"))
+	// Body: │ <line padded> │
+	for _, ln := range lines {
+		pad := innerWidth - lipgloss.Width(ln)
+		if pad < 0 {
+			pad = 0
+		}
+		b.WriteString("\n")
+		b.WriteString(border.Render("│") + " " + ln + strings.Repeat(" ", pad) + " " + border.Render("│"))
+	}
+	// Bottom: ╰<dashes>╯
+	b.WriteString("\n")
+	b.WriteString(border.Render("╰" + strings.Repeat("─", span) + "╯"))
+	return b.String()
+}

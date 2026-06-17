@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bray/fleet/internal/activity"
 )
@@ -72,5 +75,43 @@ func TestGradientTitlePreservesText(t *testing.T) {
 	}
 	if got := gradientTitle(""); got != "" {
 		t.Errorf("gradientTitle(\"\") = %q, want empty", got)
+	}
+}
+
+func TestProjectBoxStructure(t *testing.T) {
+	out := projectBox("📂 app", []string{"line one", "two"}, 12)
+	rows := strings.Split(out, "\n")
+	if len(rows) != 4 { // top + 2 body + bottom
+		t.Fatalf("expected 4 rows, got %d:\n%s", len(rows), out)
+	}
+	if !strings.HasPrefix(rows[0], "╭") || !strings.HasSuffix(rows[0], "╮") {
+		t.Errorf("top row not framed: %q", rows[0])
+	}
+	if !strings.Contains(rows[0], "📂 app") {
+		t.Errorf("label missing from top border: %q", rows[0])
+	}
+	last := rows[len(rows)-1]
+	if !strings.HasPrefix(last, "╰") || !strings.HasSuffix(last, "╯") {
+		t.Errorf("bottom row not framed: %q", last)
+	}
+	for _, r := range rows[1 : len(rows)-1] {
+		if !strings.HasPrefix(r, "│") || !strings.HasSuffix(r, "│") {
+			t.Errorf("body row not framed: %q", r)
+		}
+	}
+	want := lipgloss.Width(rows[0])
+	for _, r := range rows {
+		if got := lipgloss.Width(r); got != want {
+			t.Errorf("row width mismatch: %q is %d, want %d", r, got, want)
+		}
+	}
+}
+
+func TestProjectBoxOverlongLabelDoesNotPanic(t *testing.T) {
+	// innerWidth smaller than the label must not panic and stays framed.
+	out := projectBox("📂 a-very-long-project-name", []string{"x"}, 3)
+	rows := strings.Split(out, "\n")
+	if !strings.HasPrefix(rows[0], "╭") || !strings.HasSuffix(rows[0], "╮") {
+		t.Errorf("top row not framed: %q", rows[0])
 	}
 }
