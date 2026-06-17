@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/braydend/fleet/compare/v0.1.1...v0.2.0) (2026-06-17)
+
+
+### Features
+
+* **ui:** add gradient dashboard title ([c90ce2a](https://github.com/braydend/fleet/commit/c90ce2af533ca70c71ca41b9758fade17174174a))
+* **ui:** add rounded project-box helper ([1bcb5ff](https://github.com/braydend/fleet/commit/1bcb5ffccb2c51112a558a4aaa4f14ede49b9862))
+* **ui:** animate a spinner on working sessions ([5d531f7](https://github.com/braydend/fleet/commit/5d531f72936fbb6d48e6f690a8917ca2d2e29a73))
+* **ui:** prettier neon TUI ([#13](https://github.com/braydend/fleet/issues/13)) ([af5ce95](https://github.com/braydend/fleet/commit/af5ce9579cb1adce6b50c75230e5c0c3d8e625e3))
+* **ui:** restyle picker, form, cleanup, and confirm screens ([ed434f9](https://github.com/braydend/fleet/commit/ed434f964982189ae12aa1d4982389dbf2311ac9))
+* **ui:** use emoji status icons across the dashboard ([98866fc](https://github.com/braydend/fleet/commit/98866fc8c956a7e1fb2b86c00e4f2c9bc6ecb409))
+* **ui:** wrap dashboard project groups in rounded boxes ([e1003e0](https://github.com/braydend/fleet/commit/e1003e0917c0962137259b178117afdfbc3de85b))
+
 ## [0.1.1](https://github.com/braydend/fleet/compare/v0.1.0...v0.1.1) (2026-06-17)
 
 
