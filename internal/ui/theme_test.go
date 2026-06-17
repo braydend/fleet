@@ -15,9 +15,9 @@ func TestPaletteIsAdaptive(t *testing.T) {
 	}{
 		{"accent", "200", "212", accentColor.Light, accentColor.Dark},
 		{"working", "28", "42", workingColor.Light, workingColor.Dark},
-		{"waiting", "172", "220", waitingColor.Light, waitingColor.Dark},
-		{"exited", "248", "238", exitedColor.Light, exitedColor.Dark},
 		{"project", "31", "45", projectColor.Light, projectColor.Dark},
+		{"dim", "245", "241", dimColor.Light, dimColor.Dark},
+		{"warn", "160", "203", warnColor.Light, warnColor.Dark},
 	}
 	for _, c := range cases {
 		if c.gotLight != c.light || c.gotDark != c.dark {

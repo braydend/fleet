@@ -344,4 +344,10 @@ func TestNewSessionFormHasFleetTitle(t *testing.T) {
 	if !strings.Contains(out, "app") {
 		t.Fatalf("form title missing project name.\n---\n%s", out)
 	}
+	if !strings.Contains(out, "✨") {
+		t.Fatalf("form title missing sparkle emoji.\n---\n%s", out)
+	}
+	if !strings.Contains(out, "new session") {
+		t.Fatalf("form title missing \"new session\" text.\n---\n%s", out)
+	}
 }
