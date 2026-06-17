@@ -4,37 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
-	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/session"
 )
-
-var (
-	titleStyle    = lipgloss.NewStyle().Bold(true)
-	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-
-	workingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	waitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	idleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	exitedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-	projectStyle = lipgloss.NewStyle().Faint(true).Underline(true)
-)
-
-// activityStyle maps a state to its glyph style.
-func activityStyle(s activity.State) lipgloss.Style {
-	switch s {
-	case activity.Working:
-		return workingStyle
-	case activity.Waiting:
-		return waitingStyle
-	case activity.Exited:
-		return exitedStyle
-	default:
-		return idleStyle
-	}
-}
 
 // glyph renders the coloured activity glyph for a session.
 func glyph(s session.Session) string {
