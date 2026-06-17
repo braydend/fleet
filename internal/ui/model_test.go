@@ -452,3 +452,26 @@ func TestUpdateAppliedSetsStatusAndClearsBanner(t *testing.T) {
 		t.Fatalf("status %q should mention the new version and a restart", m.status)
 	}
 }
+
+func TestDashboardShowsUpdateBanner(t *testing.T) {
+	m := New(&Actions{}, nil)
+	if strings.Contains(m.View(), "update available") {
+		t.Fatal("banner should be absent when no update")
+	}
+	m.updateAvailable = true
+	m.updateLatest = "0.2.0"
+	out := m.View()
+	if !strings.Contains(out, "0.2.0") || !strings.Contains(out, "u") {
+		t.Fatalf("dashboard should advertise update + key: %q", out)
+	}
+}
+
+func TestUpdateConfirmView(t *testing.T) {
+	m := New(&Actions{}, nil)
+	m.state = stateUpdateConfirm
+	m.updateLatest = "0.2.0"
+	out := m.View()
+	if !strings.Contains(out, "0.2.0") || !strings.Contains(out, "y") {
+		t.Fatalf("confirm view should show version + prompt: %q", out)
+	}
+}

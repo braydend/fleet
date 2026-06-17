@@ -20,6 +20,8 @@ func (m Model) View() string {
 		return m.viewCleanupMenu()
 	case stateConfirm:
 		return m.viewConfirm()
+	case stateUpdateConfirm:
+		return m.viewUpdateConfirm()
 	default:
 		return m.viewDashboard()
 	}
@@ -109,6 +111,10 @@ func (m Model) viewDashboard() string {
 		activityIcon(activity.Working), activityIcon(activity.Waiting),
 		activityIcon(activity.Idle), activityIcon(activity.Exited))
 	b.WriteString("\n" + dimStyle.Render(legend))
+	if m.updateAvailable {
+		banner := fmt.Sprintf("⬆ update available: v%s → press u to update", m.updateLatest)
+		b.WriteString("\n" + warnStyle.Render(banner))
+	}
 	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
 	if m.status != "" {
 		b.WriteString("\n" + m.status)
@@ -152,4 +158,10 @@ func (m Model) viewConfirm() string {
 	return warnStyle.Render("⚠️  confirm delete") + "\n\n" +
 		fmt.Sprintf("%s/%s has uncommitted or unpushed changes.\n", s.Project, s.Name) +
 		"Delete worktree and branch anyway? " + dimStyle.Render("(y/n)")
+}
+
+func (m Model) viewUpdateConfirm() string {
+	return warnStyle.Render("⬆ update fleet") + "\n\n" +
+		fmt.Sprintf("A new version is available: v%s.\n", m.updateLatest) +
+		"Download and replace the running binary now? " + dimStyle.Render("(y/n)")
 }
