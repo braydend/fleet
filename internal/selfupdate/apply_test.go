@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"testing"
 )
@@ -76,6 +77,22 @@ func TestApplyPermissionDenied(t *testing.T) {
 	err := (Applier{Client: urlClient{}, Updater: up}).Apply(rel)
 	if !IsPermission(err) {
 		t.Fatalf("expected ErrPermission, got %v", err)
+	}
+}
+
+func TestApplyPermissionDeniedAtSwap(t *testing.T) {
+	rel, archive, checksums, _ := buildRelease(t)
+	client := urlClient{bodies: map[string][]byte{
+		"https://x/archive": archive,
+		"https://x/sums":    []byte(checksums),
+	}}
+	// A permission error surfacing from the real swap (minio returns a raw
+	// *os.PathError wrapping EACCES, matched by fs.ErrPermission) must map to
+	// ErrPermission so the UI shows the manual-install hint.
+	up := &fakeUpdater{applyErr: fs.ErrPermission}
+	err := (Applier{Client: client, Updater: up}).Apply(rel)
+	if !IsPermission(err) {
+		t.Fatalf("swap-time permission error should map to ErrPermission, got %v", err)
 	}
 }
 

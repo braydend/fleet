@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"runtime"
 )
@@ -64,8 +65,13 @@ func (a Applier) Apply(rel Release) error {
 		return err
 	}
 	if err := a.Updater.Apply(bytesReader(bin)); err != nil {
-		if IsPermission(err) {
-			return err
+		// The pre-flight CheckPermissions above catches the common non-writable
+		// install dir, but a permission error can still surface during the real
+		// swap (e.g. perms changed since, or the rename is blocked). minio returns
+		// a raw *os.PathError there, not our sentinel — map it so the UI still
+		// shows the manual-install hint instead of an opaque error.
+		if IsPermission(err) || errors.Is(err, fs.ErrPermission) {
+			return fmt.Errorf("%w: %v", ErrPermission, err)
 		}
 		return fmt.Errorf("apply update: %w", err)
 	}
