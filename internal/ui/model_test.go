@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bray/fleet/internal/activity"
@@ -267,5 +268,36 @@ func TestFormSubmitReturnsToDashboard(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("expected a create command")
+	}
+}
+
+func TestSpinnerTickKeepsStateAndReturnsCmd(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	m = updated.(Model)
+	next, cmd := m.Update(spinner.TickMsg{})
+	if cmd == nil {
+		t.Fatal("expected spinner tick to schedule the next tick")
+	}
+	mm := next.(Model)
+	if mm.state != stateDashboard {
+		t.Fatalf("spinner tick changed state to %v", mm.state)
+	}
+	if len(mm.sessions) != 2 {
+		t.Fatalf("spinner tick disturbed sessions: got %d", len(mm.sessions))
+	}
+}
+
+func TestDashboardSpinsOnlyWorkingSessions(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	out := updated.(Model).View()
+	// session "a" is Working: its detail line shows the MiniDot frame "⠋".
+	if !strings.Contains(out, "⠋ working") {
+		t.Fatalf("expected working session to show a spinner frame.\n---\n%s", out)
+	}
+	// session "b" is Exited: no spinner frame on its detail line.
+	if strings.Contains(out, "⠋ exited") {
+		t.Fatalf("did not expect a spinner frame on an exited session.\n---\n%s", out)
 	}
 }

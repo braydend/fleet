@@ -54,8 +54,13 @@ func (m Model) viewDashboard() string {
 			b.WriteString("  " + identity + "\n")
 		}
 
-		// Detail line: activity word, git state, age.
-		detail := "    " + s.Activity.Label()
+		// Detail line: activity word, git state, age. Working sessions get the
+		// animated spinner frame; other states render plain.
+		detail := "    "
+		if s.Activity == activity.Working {
+			detail += m.spinner.View() + " "
+		}
+		detail += s.Activity.Label()
 		if s.Git.Dirty {
 			detail += fmt.Sprintf(" · ✱%d", s.Git.ChangeCount)
 		} else {
