@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/bray/fleet/internal/activity"
 )
 
@@ -31,14 +33,20 @@ func (m Model) viewDashboard() string {
 	}
 
 	// Sessions arrive already ordered by project then name (the refresher reads
-	// dirs in os.ReadDir's sorted order), so a contiguous-run check is enough to
-	// print each project header exactly once.
+	// dirs in os.ReadDir's sorted order), so a contiguous-run check groups each
+	// project's sessions into one labelled block of styled content lines.
+	type block struct {
+		label string
+		lines []string
+	}
+	var blocks []block
 	lastProject := ""
 	for i, s := range m.sessions {
-		if s.Project != lastProject {
-			b.WriteString(projectStyle.Render(s.Project) + "\n")
+		if s.Project != lastProject || len(blocks) == 0 {
+			blocks = append(blocks, block{label: "📂 " + s.Project})
 			lastProject = s.Project
 		}
+		cur := &blocks[len(blocks)-1]
 
 		// Tab number: the window index, or "-" when there is no live window.
 		// tmux is configured with base-index 1 (see tmux.CLI), so a live window
@@ -49,9 +57,9 @@ func (m Model) viewDashboard() string {
 		}
 		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, activityIcon(s.Activity), s.Name, s.Branch, s.Base)
 		if i == m.cursor {
-			b.WriteString(selectedStyle.Render("› "+identity) + "\n")
+			cur.lines = append(cur.lines, selectedStyle.Render("› "+identity))
 		} else {
-			b.WriteString("  " + identity + "\n")
+			cur.lines = append(cur.lines, "  "+identity)
 		}
 
 		// Detail line: activity word, git state, age. Working sessions get the
@@ -72,10 +80,31 @@ func (m Model) viewDashboard() string {
 		if !s.CreatedAt.IsZero() {
 			detail += " · created " + s.CreatedAt.Format("2006-01-02 15:04")
 		}
-		b.WriteString(dimStyle.Render(detail) + "\n")
+		cur.lines = append(cur.lines, dimStyle.Render(detail))
 	}
 
-	// Legend for the activity glyphs.
+	// Uniform inner width: the widest content line, and wide enough that every
+	// label fits inside its top border.
+	innerWidth := 0
+	for _, bl := range blocks {
+		if w := lipgloss.Width(bl.label); w > innerWidth {
+			innerWidth = w
+		}
+		for _, ln := range bl.lines {
+			if w := lipgloss.Width(ln); w > innerWidth {
+				innerWidth = w
+			}
+		}
+	}
+
+	for i, bl := range blocks {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(projectBox(bl.label, bl.lines, innerWidth) + "\n")
+	}
+
+	// Legend for the activity glyphs, below the boxes and above the keybinds.
 	legend := fmt.Sprintf("legend: %s working  %s waiting  %s idle  %s exited",
 		activityIcon(activity.Working), activityIcon(activity.Waiting),
 		activityIcon(activity.Idle), activityIcon(activity.Exited))

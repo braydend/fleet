@@ -39,6 +39,33 @@ func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
 	}
 }
 
+func TestDashboardWrapsProjectsInBorders(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	out := updated.(Model).View()
+
+	if !strings.Contains(out, "╭") || !strings.Contains(out, "╰") {
+		t.Fatalf("dashboard missing rounded box borders.\n---\n%s", out)
+	}
+	// Project name sits inside the top border.
+	found := false
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "╭") && strings.Contains(ln, "📂 app") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("project name not embedded in a top border.\n---\n%s", out)
+	}
+	// Legend stays before the keybind footer.
+	li := strings.Index(out, "legend:")
+	ki := strings.Index(out, "n new ·")
+	if li < 0 || ki < 0 || li > ki {
+		t.Errorf("legend should appear before keybinds (legend=%d keybind=%d)", li, ki)
+	}
+}
+
 func TestSessionsUpdatedPopulatesList(t *testing.T) {
 	m := New(nil, nil)
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
