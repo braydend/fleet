@@ -84,6 +84,27 @@ worktree_base_dir: /home/you/.local/share/fleet/worktrees
   existing directory).
 - `worktree_base_dir` defaults to `~/.local/share/fleet/worktrees` if omitted.
 
+## Self-update
+
+A released `fleet` binary can update itself in place — no need to revisit the
+releases page, download a tarball, or clear the macOS quarantine flag by hand.
+
+- **Check:** on startup, and at most hourly while running, fleet queries the
+  GitHub Releases API for the latest version and compares it to the running
+  one. The check is throttled (a last-checked timestamp is kept in fleet's
+  state dir) and needs no `gh` install or authentication.
+- **Prompt:** when a newer version is available, an update banner appears on the
+  dashboard. Nothing happens until you opt in.
+- **Apply:** press `u` to update. fleet downloads the correct archive for your
+  platform, verifies its SHA-256 against the release `checksums.txt`, and
+  atomically swaps the running binary. Because fleet downloads the binary
+  itself, macOS Gatekeeper does not quarantine it.
+- **Restart:** fleet does **not** restart itself — your live tmux sessions keep
+  running. Restart fleet when convenient to run the new version.
+
+Updates are **never** applied without your confirmation. The check is skipped
+entirely for local/source builds (version `dev`).
+
 ## Keybindings
 
 **Dashboard**
@@ -94,8 +115,11 @@ worktree_base_dir: /home/you/.local/share/fleet/worktrees
 | `Enter` | attach to the selected session |
 | `d` | cleanup menu for the selected session |
 | `r` | refresh now |
+| `u` | update fleet in place (only when a newer release is available — see [Self-update](#self-update)) |
 | `↑`/`k`, `↓`/`j` | move selection |
 | `q` / `Ctrl-c` | quit |
+
+The dashboard footer shows the running version (or `dev` for a local build).
 
 **While attached**: a small status bar at the bottom shows which session you're
 in and the key to detach and return to the dashboard (`<prefix> d`, e.g.
