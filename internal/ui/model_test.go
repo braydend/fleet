@@ -12,8 +12,15 @@ import (
 	"github.com/bray/fleet/internal/activity"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
+	"github.com/bray/fleet/internal/selfupdate"
 	"github.com/bray/fleet/internal/session"
 )
+
+// keyMsg builds a tea.KeyMsg for a single rune key, matching the form used
+// throughout this file (e.g. tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}).
+func keyMsg(key string) tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+}
 
 var errSample = errors.New("boom")
 
@@ -376,5 +383,72 @@ func TestNewSessionFormHasFleetTitle(t *testing.T) {
 	}
 	if !strings.Contains(out, "new session") {
 		t.Fatalf("form title missing \"new session\" text.\n---\n%s", out)
+	}
+}
+
+func availableResult() selfupdate.CheckResult {
+	return selfupdate.CheckResult{
+		Available: true, Current: "0.1.0", Latest: "0.2.0",
+		Release: selfupdate.Release{Version: "0.2.0"},
+	}
+}
+
+func TestUpdateAvailableSetsBannerState(t *testing.T) {
+	m := New(&Actions{}, nil)
+	next, _ := m.Update(updateAvailableMsg{res: availableResult()})
+	m = next.(Model)
+	if !m.updateAvailable || m.updateLatest != "0.2.0" {
+		t.Fatalf("update state not set: %+v", m)
+	}
+}
+
+func TestUpdateNotAvailableLeavesBannerOff(t *testing.T) {
+	m := New(&Actions{}, nil)
+	res := availableResult()
+	res.Available = false
+	next, _ := m.Update(updateAvailableMsg{res: res})
+	if next.(Model).updateAvailable {
+		t.Fatal("banner should stay off when not available")
+	}
+}
+
+func TestPressingUOpensConfirmWhenAvailable(t *testing.T) {
+	m := New(&Actions{}, nil)
+	m.updateAvailable = true
+	m.updateRelease = selfupdate.Release{Version: "0.2.0"}
+	next, _ := m.Update(keyMsg("u"))
+	if next.(Model).state != stateUpdateConfirm {
+		t.Fatalf("expected stateUpdateConfirm, got %v", next.(Model).state)
+	}
+}
+
+func TestPressingUDoesNothingWhenNoUpdate(t *testing.T) {
+	m := New(&Actions{}, nil)
+	next, _ := m.Update(keyMsg("u"))
+	if next.(Model).state != stateDashboard {
+		t.Fatal("u with no update should stay on dashboard")
+	}
+}
+
+func TestUpdateConfirmCancel(t *testing.T) {
+	m := New(&Actions{}, nil)
+	m.updateAvailable = true
+	m.state = stateUpdateConfirm
+	next, _ := m.Update(keyMsg("n"))
+	if next.(Model).state != stateDashboard {
+		t.Fatal("n should return to dashboard")
+	}
+}
+
+func TestUpdateAppliedSetsStatusAndClearsBanner(t *testing.T) {
+	m := New(&Actions{}, nil)
+	m.updateAvailable = true
+	next, _ := m.Update(updateAppliedMsg{version: "0.2.0"})
+	m = next.(Model)
+	if m.updateAvailable {
+		t.Fatal("banner should clear after applying")
+	}
+	if !strings.Contains(m.status, "0.2.0") || !strings.Contains(m.status, "restart") {
+		t.Fatalf("status %q should mention the new version and a restart", m.status)
 	}
 }
