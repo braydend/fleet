@@ -7,39 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bray/fleet/internal/activity"
-	"github.com/bray/fleet/internal/session"
 )
-
-var (
-	titleStyle    = lipgloss.NewStyle().Bold(true)
-	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-
-	workingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	waitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	idleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	exitedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-	projectStyle = lipgloss.NewStyle().Faint(true).Underline(true)
-)
-
-// activityStyle maps a state to its glyph style.
-func activityStyle(s activity.State) lipgloss.Style {
-	switch s {
-	case activity.Working:
-		return workingStyle
-	case activity.Waiting:
-		return waitingStyle
-	case activity.Exited:
-		return exitedStyle
-	default:
-		return idleStyle
-	}
-}
-
-// glyph renders the coloured activity glyph for a session.
-func glyph(s session.Session) string {
-	return activityStyle(s.Activity).Render(s.Activity.Glyph())
-}
 
 // View renders the current state.
 func (m Model) View() string {
@@ -59,20 +27,26 @@ func (m Model) View() string {
 
 func (m Model) viewDashboard() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("fleet — sessions") + "\n\n")
+	b.WriteString(gradientTitle("✨ fleet · your sessions ✨") + "\n\n")
 	if len(m.sessions) == 0 {
 		b.WriteString(dimStyle.Render("no sessions. press n to create one.") + "\n")
 	}
 
 	// Sessions arrive already ordered by project then name (the refresher reads
-	// dirs in os.ReadDir's sorted order), so a contiguous-run check is enough to
-	// print each project header exactly once.
+	// dirs in os.ReadDir's sorted order), so a contiguous-run check groups each
+	// project's sessions into one labelled block of styled content lines.
+	type block struct {
+		label string
+		lines []string
+	}
+	var blocks []block
 	lastProject := ""
 	for i, s := range m.sessions {
-		if s.Project != lastProject {
-			b.WriteString(projectStyle.Render(s.Project) + "\n")
+		if s.Project != lastProject || len(blocks) == 0 {
+			blocks = append(blocks, block{label: "📂 " + s.Project})
 			lastProject = s.Project
 		}
+		cur := &blocks[len(blocks)-1]
 
 		// Tab number: the window index, or "-" when there is no live window.
 		// tmux is configured with base-index 1 (see tmux.CLI), so a live window
@@ -81,15 +55,20 @@ func (m Model) viewDashboard() string {
 		if s.WindowIndex > 0 {
 			num = fmt.Sprintf("%d", s.WindowIndex)
 		}
-		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, glyph(s), s.Name, s.Branch, s.Base)
+		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, activityIcon(s.Activity), s.Name, s.Branch, s.Base)
 		if i == m.cursor {
-			b.WriteString(selectedStyle.Render("› "+identity) + "\n")
+			cur.lines = append(cur.lines, selectedStyle.Render("› "+identity))
 		} else {
-			b.WriteString("  " + identity + "\n")
+			cur.lines = append(cur.lines, "  "+identity)
 		}
 
-		// Detail line: activity word, git state, age.
-		detail := "    " + s.Activity.Label()
+		// Detail line: activity word, git state, age. Working sessions get the
+		// animated spinner frame; other states render plain.
+		detail := "    "
+		if s.Activity == activity.Working {
+			detail += m.spinner.View() + " "
+		}
+		detail += s.Activity.Label()
 		if s.Git.Dirty {
 			detail += fmt.Sprintf(" · ✱%d", s.Git.ChangeCount)
 		} else {
@@ -101,13 +80,34 @@ func (m Model) viewDashboard() string {
 		if !s.CreatedAt.IsZero() {
 			detail += " · created " + s.CreatedAt.Format("2006-01-02 15:04")
 		}
-		b.WriteString(dimStyle.Render(detail) + "\n")
+		cur.lines = append(cur.lines, dimStyle.Render(detail))
 	}
 
-	// Legend for the activity glyphs.
+	// Uniform inner width: the widest content line, and wide enough that every
+	// label fits inside its top border.
+	innerWidth := 0
+	for _, bl := range blocks {
+		if w := lipgloss.Width(bl.label); w > innerWidth {
+			innerWidth = w
+		}
+		for _, ln := range bl.lines {
+			if w := lipgloss.Width(ln); w > innerWidth {
+				innerWidth = w
+			}
+		}
+	}
+
+	for i, bl := range blocks {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(projectBox(bl.label, bl.lines, innerWidth) + "\n")
+	}
+
+	// Legend for the activity glyphs, below the boxes and above the keybinds.
 	legend := fmt.Sprintf("legend: %s working  %s waiting  %s idle  %s exited",
-		workingStyle.Render("◉"), waitingStyle.Render("◉"),
-		idleStyle.Render("◉"), exitedStyle.Render("○"))
+		activityIcon(activity.Working), activityIcon(activity.Waiting),
+		activityIcon(activity.Idle), activityIcon(activity.Exited))
 	b.WriteString("\n" + dimStyle.Render(legend))
 	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
 	if m.status != "" {
@@ -118,13 +118,14 @@ func (m Model) viewDashboard() string {
 
 func (m Model) viewProjectPicker() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("pick a project") + "\n\n")
+	b.WriteString(gradientTitle("✨ pick a project ✨") + "\n\n")
 	for i, p := range m.projects {
-		prefix := "  "
+		line := "📂 " + p.Name
 		if i == m.cursor {
-			prefix = "› "
+			b.WriteString(selectedStyle.Render("› "+line) + "\n")
+		} else {
+			b.WriteString("  " + line + "\n")
 		}
-		b.WriteString(prefix + p.Name + "\n")
 	}
 	b.WriteString("\n" + dimStyle.Render("enter select · esc cancel"))
 	return b.String()
@@ -133,14 +134,14 @@ func (m Model) viewProjectPicker() string {
 func (m Model) viewCleanupMenu() string {
 	s, _ := m.selected()
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("cleanup — "+s.Project+"/"+s.Name) + "\n\n")
-	choices := []string{"delete worktree + branch", "push / open PR", "leave (kill tmux only)"}
+	b.WriteString(gradientTitle("✨ cleanup — "+s.Project+"/"+s.Name+" ✨") + "\n\n")
+	choices := []string{"🗑  delete worktree + branch", "🚀 push / open PR", "👋 leave (kill tmux only)"}
 	for i, c := range choices {
-		prefix := "  "
 		if cleanupChoice(i) == m.cleanupChoice {
-			prefix = "› "
+			b.WriteString(selectedStyle.Render("› "+c) + "\n")
+		} else {
+			b.WriteString("  " + c + "\n")
 		}
-		b.WriteString(prefix + c + "\n")
 	}
 	b.WriteString("\n" + dimStyle.Render("enter choose · esc cancel"))
 	return b.String()
@@ -148,7 +149,7 @@ func (m Model) viewCleanupMenu() string {
 
 func (m Model) viewConfirm() string {
 	s := m.pendingDelete
-	return titleStyle.Render("confirm delete") + "\n\n" +
+	return warnStyle.Render("⚠️  confirm delete") + "\n\n" +
 		fmt.Sprintf("%s/%s has uncommitted or unpushed changes.\n", s.Project, s.Name) +
 		"Delete worktree and branch anyway? " + dimStyle.Render("(y/n)")
 }

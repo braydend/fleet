@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bray/fleet/internal/projects"
@@ -44,7 +45,10 @@ type Model struct {
 	state    state
 	sessions []session.Session
 	cursor   int
-	status   string
+	status string
+
+	// spinner animates the glyph beside working sessions (decorative only).
+	spinner spinner.Model
 
 	// new-session sub-state
 	projects []projects.Project
@@ -62,12 +66,15 @@ func New(actions *Actions, _ any) Model {
 	if actions != nil {
 		a = *actions
 	}
-	return Model{actions: a, state: stateDashboard}
+	sp := spinner.New()
+	sp.Spinner = spinner.MiniDot
+	sp.Style = spinnerStyle
+	return Model{actions: a, state: stateDashboard, spinner: sp}
 }
 
 // Init kicks off the first refresh and the tick loop.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(refresh(m.actions.Refresh), tick())
+	return tea.Batch(refresh(m.actions.Refresh), tick(), m.spinner.Tick)
 }
 
 // Update is the reducer.
@@ -100,6 +107,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.state = stateProjectPicker
 		return m, nil
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)

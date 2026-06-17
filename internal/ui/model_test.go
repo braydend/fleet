@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bray/fleet/internal/activity"
@@ -31,10 +32,37 @@ func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 
-	for _, want := range []string{"app", "fleet/a", "← main", "1", "working", "exited", "legend"} {
+	for _, want := range []string{"app", "fleet/a", "← main", "1", "working", "exited", "legend", "🟢", "⚫"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("dashboard view missing %q.\n---\n%s", want, out)
 		}
+	}
+}
+
+func TestDashboardWrapsProjectsInBorders(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	out := updated.(Model).View()
+
+	if !strings.Contains(out, "╭") || !strings.Contains(out, "╰") {
+		t.Fatalf("dashboard missing rounded box borders.\n---\n%s", out)
+	}
+	// Project name sits inside the top border.
+	found := false
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "╭") && strings.Contains(ln, "📂 app") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("project name not embedded in a top border.\n---\n%s", out)
+	}
+	// Legend stays before the keybind footer.
+	li := strings.Index(out, "legend:")
+	ki := strings.Index(out, "n new ·")
+	if li < 0 || ki < 0 || li > ki {
+		t.Errorf("legend should appear before keybinds (legend=%d keybind=%d)", li, ki)
 	}
 }
 
@@ -267,5 +295,86 @@ func TestFormSubmitReturnsToDashboard(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("expected a create command")
+	}
+}
+
+func TestSpinnerTickKeepsStateAndReturnsCmd(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	m = updated.(Model)
+	next, cmd := m.Update(spinner.TickMsg{})
+	if cmd == nil {
+		t.Fatal("expected spinner tick to schedule the next tick")
+	}
+	mm := next.(Model)
+	if mm.state != stateDashboard {
+		t.Fatalf("spinner tick changed state to %v", mm.state)
+	}
+	if len(mm.sessions) != 2 {
+		t.Fatalf("spinner tick disturbed sessions: got %d", len(mm.sessions))
+	}
+}
+
+func TestDashboardSpinsOnlyWorkingSessions(t *testing.T) {
+	m := New(nil, nil)
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
+	out := updated.(Model).View()
+	// session "a" is Working: its detail line shows the MiniDot frame "⠋".
+	if !strings.Contains(out, "⠋ working") {
+		t.Fatalf("expected working session to show a spinner frame.\n---\n%s", out)
+	}
+	// session "b" is Exited: no spinner frame on its detail line.
+	if strings.Contains(out, "⠋ exited") {
+		t.Fatalf("did not expect a spinner frame on an exited session.\n---\n%s", out)
+	}
+}
+
+func TestProjectPickerHasFolderMarkers(t *testing.T) {
+	a := Actions{Projects: func() ([]projects.Project, error) {
+		return []projects.Project{{Name: "app"}, {Name: "web"}}, nil
+	}}
+	m := New(&a, nil)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	updated, _ := m.Update(cmd())
+	out := updated.(Model).View()
+	if !strings.Contains(out, "📂 app") || !strings.Contains(out, "📂 web") {
+		t.Fatalf("project picker missing folder markers.\n---\n%s", out)
+	}
+}
+
+func TestCleanupMenuHasEmojiActions(t *testing.T) {
+	m := New(nil, nil)
+	m.sessions = sample()
+	m.cursor = 0
+	m.state = stateCleanupMenu
+	out := m.View()
+	for _, want := range []string{"🗑", "🚀", "👋"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("cleanup menu missing %q.\n---\n%s", want, out)
+		}
+	}
+}
+
+func TestConfirmDialogHasWarning(t *testing.T) {
+	m := New(nil, nil)
+	m.pendingDelete = sample()[0]
+	m.state = stateConfirm
+	out := m.View()
+	if !strings.Contains(out, "⚠️") {
+		t.Fatalf("confirm dialog missing warning marker.\n---\n%s", out)
+	}
+}
+
+func TestNewSessionFormHasFleetTitle(t *testing.T) {
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	out := f.view()
+	if !strings.Contains(out, "app") {
+		t.Fatalf("form title missing project name.\n---\n%s", out)
+	}
+	if !strings.Contains(out, "✨") {
+		t.Fatalf("form title missing sparkle emoji.\n---\n%s", out)
+	}
+	if !strings.Contains(out, "new session") {
+		t.Fatalf("form title missing \"new session\" text.\n---\n%s", out)
 	}
 }
