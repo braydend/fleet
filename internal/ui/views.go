@@ -128,7 +128,11 @@ func (m Model) viewDashboard() string {
 		banner := fmt.Sprintf("⬆ update available: v%s → press u to update", m.updateLatest)
 		b.WriteString("\n" + warnStyle.Render(banner))
 	}
-	b.WriteString("\n" + dimStyle.Render("n new · enter attach · d cleanup · r refresh · q quit"))
+	footer := "n new · enter attach · d cleanup · r refresh · q quit"
+	if label := versionLabel(m.version); label != "" {
+		footer += " · " + label
+	}
+	b.WriteString("\n" + dimStyle.Render(footer))
 	if m.status != "" {
 		b.WriteString("\n" + m.status)
 	}

@@ -53,6 +53,9 @@ type Model struct {
 	cursor   int
 	status   string
 
+	// version is the build version shown in the dashboard footer.
+	version string
+
 	// spinner animates the glyph beside working sessions (decorative only).
 	spinner spinner.Model
 
@@ -70,9 +73,9 @@ type Model struct {
 	updateLatest    string
 }
 
-// New builds a Model. actions may be the zero value in tests; refreshFn is the
-// initial-load function (usually actions.Refresh).
-func New(actions *Actions, _ any) Model {
+// New builds a Model. actions may be the zero value in tests; version is the
+// build version string shown in the dashboard footer ("" hides it).
+func New(actions *Actions, version string) Model {
 	var a Actions
 	if actions != nil {
 		a = *actions
@@ -80,7 +83,7 @@ func New(actions *Actions, _ any) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
 	sp.Style = spinnerStyle
-	return Model{actions: a, state: stateDashboard, spinner: sp}
+	return Model{actions: a, state: stateDashboard, spinner: sp, version: version}
 }
 
 // Init kicks off the first refresh, the tick loop, and the update check.

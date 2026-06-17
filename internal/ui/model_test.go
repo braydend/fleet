@@ -35,7 +35,7 @@ func sample() []session.Session {
 }
 
 func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 
@@ -47,7 +47,7 @@ func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
 }
 
 func TestDashboardWrapsProjectsInBorders(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 
@@ -74,7 +74,7 @@ func TestDashboardWrapsProjectsInBorders(t *testing.T) {
 }
 
 func TestSessionsUpdatedPopulatesList(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	mm := updated.(Model)
 	if len(mm.sessions) != 2 {
@@ -90,7 +90,7 @@ func TestSessionsUpdatedPopulatesList(t *testing.T) {
 }
 
 func TestQuitKey(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd == nil {
 		t.Fatal("expected quit command")
@@ -98,7 +98,7 @@ func TestQuitKey(t *testing.T) {
 }
 
 func TestErrorMsgSetsStatus(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	updated, _ := m.Update(errorMsg{err: errSample})
 	if got := updated.(Model).status; got == "" {
 		t.Fatal("expected status to be set on error")
@@ -111,7 +111,7 @@ func TestNKeyOpensProjectPicker(t *testing.T) {
 		called = true
 		return []projects.Project{{Name: "app", Path: "/code/app", DefaultBranch: "main"}}, nil
 	}}
-	m := New(&a, nil)
+	m := New(&a, "")
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	// The command loads projects; run it and feed the result back.
 	if cmd == nil {
@@ -134,7 +134,7 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 		gotName, gotBranch, gotBase = name, branch, base
 		return nil
 	}}
-	m := New(&a, nil)
+	m := New(&a, "")
 	m.state = stateNewSession
 	m.form = newSessionForm{
 		project:       projects.Project{Name: "app", Path: "/code/app", DefaultBranch: "main"},
@@ -166,7 +166,7 @@ func TestBranchDefaultsToSessionName(t *testing.T) {
 // Regression: typing the session name one rune at a time must keep the branch
 // tracking the *whole* name, not just the first character.
 func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.state = stateNewSession
 	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
 	for _, r := range "fix" {
@@ -184,7 +184,7 @@ func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
 // Once the user edits the branch field directly, it must stop auto-tracking the
 // session name.
 func TestEditedBranchStopsTrackingSessionName(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.state = stateNewSession
 	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
 	m.form.field = fieldBranch
@@ -207,7 +207,7 @@ func TestEnterAttachesSelectedSession(t *testing.T) {
 		attached = s
 		return func() tea.Msg { return nil }
 	}}
-	m := New(&a, nil)
+	m := New(&a, "")
 	m.sessions = sample()
 	m.cursor = 0
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -220,7 +220,7 @@ func TestEnterAttachesSelectedSession(t *testing.T) {
 }
 
 func TestDOpensCleanupMenu(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.sessions = sample()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	if updated.(Model).state != stateCleanupMenu {
@@ -234,7 +234,7 @@ func TestCleanupLeaveCallsLeave(t *testing.T) {
 		Leave:   func(session.Session) error { left = true; return nil },
 		Refresh: func() ([]session.Session, error) { return nil, nil },
 	}
-	m := New(&a, nil)
+	m := New(&a, "")
 	m.sessions = sample()
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -250,7 +250,7 @@ func TestCleanupLeaveCallsLeave(t *testing.T) {
 }
 
 func TestDeleteDirtyRequiresConfirm(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.sessions = sample() // session "a" is dirty
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -262,7 +262,7 @@ func TestDeleteDirtyRequiresConfirm(t *testing.T) {
 }
 
 func TestRefreshDoesNotLeaveProjectPicker(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.state = stateProjectPicker
 	m.projects = []projects.Project{{Name: "app"}}
 	// A periodic refresh completing must not yank the user back to the dashboard.
@@ -277,7 +277,7 @@ func TestRefreshDoesNotLeaveProjectPicker(t *testing.T) {
 }
 
 func TestRefreshDoesNotLeaveNewSessionForm(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.state = stateNewSession
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	if updated.(Model).state != stateNewSession {
@@ -287,7 +287,7 @@ func TestRefreshDoesNotLeaveNewSessionForm(t *testing.T) {
 
 func TestFormSubmitReturnsToDashboard(t *testing.T) {
 	a := Actions{Create: func(projects.Project, string, string, string) error { return nil }}
-	m := New(&a, nil)
+	m := New(&a, "")
 	m.state = stateNewSession
 	m.form = newSessionForm{
 		project:     projects.Project{Name: "app", DefaultBranch: "main"},
@@ -306,7 +306,7 @@ func TestFormSubmitReturnsToDashboard(t *testing.T) {
 }
 
 func TestSpinnerTickKeepsStateAndReturnsCmd(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	m = updated.(Model)
 	next, cmd := m.Update(spinner.TickMsg{})
@@ -323,7 +323,7 @@ func TestSpinnerTickKeepsStateAndReturnsCmd(t *testing.T) {
 }
 
 func TestDashboardSpinsOnlyWorkingSessions(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 	// session "a" is Working: its detail line shows the MiniDot frame "⠋".
@@ -340,7 +340,7 @@ func TestProjectPickerHasFolderMarkers(t *testing.T) {
 	a := Actions{Projects: func() ([]projects.Project, error) {
 		return []projects.Project{{Name: "app"}, {Name: "web"}}, nil
 	}}
-	m := New(&a, nil)
+	m := New(&a, "")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	updated, _ := m.Update(cmd())
 	out := updated.(Model).View()
@@ -350,7 +350,7 @@ func TestProjectPickerHasFolderMarkers(t *testing.T) {
 }
 
 func TestCleanupMenuHasEmojiActions(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.sessions = sample()
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -363,7 +363,7 @@ func TestCleanupMenuHasEmojiActions(t *testing.T) {
 }
 
 func TestConfirmDialogHasWarning(t *testing.T) {
-	m := New(nil, nil)
+	m := New(nil, "")
 	m.pendingDelete = sample()[0]
 	m.state = stateConfirm
 	out := m.View()
@@ -394,7 +394,7 @@ func availableResult() selfupdate.CheckResult {
 }
 
 func TestUpdateAvailableSetsBannerState(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	next, _ := m.Update(updateAvailableMsg{res: availableResult()})
 	m = next.(Model)
 	if !m.updateAvailable || m.updateLatest != "0.2.0" {
@@ -403,7 +403,7 @@ func TestUpdateAvailableSetsBannerState(t *testing.T) {
 }
 
 func TestUpdateNotAvailableLeavesBannerOff(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	res := availableResult()
 	res.Available = false
 	next, _ := m.Update(updateAvailableMsg{res: res})
@@ -413,7 +413,7 @@ func TestUpdateNotAvailableLeavesBannerOff(t *testing.T) {
 }
 
 func TestPressingUOpensConfirmWhenAvailable(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	m.updateAvailable = true
 	m.updateRelease = selfupdate.Release{Version: "0.2.0"}
 	next, _ := m.Update(keyMsg("u"))
@@ -423,7 +423,7 @@ func TestPressingUOpensConfirmWhenAvailable(t *testing.T) {
 }
 
 func TestPressingUDoesNothingWhenNoUpdate(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	next, _ := m.Update(keyMsg("u"))
 	if next.(Model).state != stateDashboard {
 		t.Fatal("u with no update should stay on dashboard")
@@ -431,7 +431,7 @@ func TestPressingUDoesNothingWhenNoUpdate(t *testing.T) {
 }
 
 func TestUpdateConfirmCancel(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	m.updateAvailable = true
 	m.state = stateUpdateConfirm
 	next, _ := m.Update(keyMsg("n"))
@@ -441,7 +441,7 @@ func TestUpdateConfirmCancel(t *testing.T) {
 }
 
 func TestUpdateAppliedSetsStatusAndClearsBanner(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	m.updateAvailable = true
 	next, _ := m.Update(updateAppliedMsg{version: "0.2.0"})
 	m = next.(Model)
@@ -454,7 +454,7 @@ func TestUpdateAppliedSetsStatusAndClearsBanner(t *testing.T) {
 }
 
 func TestDashboardShowsUpdateBanner(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	if strings.Contains(m.View(), "update available") {
 		t.Fatal("banner should be absent when no update")
 	}
@@ -467,12 +467,39 @@ func TestDashboardShowsUpdateBanner(t *testing.T) {
 }
 
 func TestUpdateConfirmView(t *testing.T) {
-	m := New(&Actions{}, nil)
+	m := New(&Actions{}, "")
 	m.state = stateUpdateConfirm
 	m.updateLatest = "0.2.0"
 	out := m.View()
 	if !strings.Contains(out, "0.2.0") || !strings.Contains(out, "y") {
 		t.Fatalf("confirm view should show version + prompt: %q", out)
+	}
+}
+
+func TestDashboardFooterShowsReleaseVersion(t *testing.T) {
+	m := New(&Actions{}, "0.2.0")
+	out := m.View()
+	if !strings.Contains(out, "q quit · v0.2.0") {
+		t.Fatalf("footer should show release version.\n---\n%s", out)
+	}
+}
+
+func TestDashboardFooterShowsDevVersion(t *testing.T) {
+	m := New(&Actions{}, "dev")
+	out := m.View()
+	if !strings.Contains(out, "q quit · dev") {
+		t.Fatalf("footer should show dev version.\n---\n%s", out)
+	}
+}
+
+func TestDashboardFooterOmitsEmptyVersion(t *testing.T) {
+	m := New(&Actions{}, "")
+	out := m.View()
+	if !strings.Contains(out, "q quit") {
+		t.Fatalf("footer keybinds missing.\n---\n%s", out)
+	}
+	if strings.Contains(out, "q quit · ") {
+		t.Fatalf("empty version should append no label.\n---\n%s", out)
 	}
 }
 

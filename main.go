@@ -152,7 +152,7 @@ func run() error {
 		},
 	}
 
-	p := tea.NewProgram(ui.New(&actions, nil), tea.WithAltScreen())
+	p := tea.NewProgram(ui.New(&actions, version), tea.WithAltScreen())
 	_, err = p.Run()
 	return err
 }
