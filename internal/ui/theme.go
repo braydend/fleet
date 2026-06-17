@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
+	colorful "github.com/lucasb-eyer/go-colorful"
 
 	"github.com/bray/fleet/internal/activity"
 )
@@ -61,4 +64,57 @@ func activityIcon(s activity.State) string {
 	default: // Idle
 		return "💤"
 	}
+}
+
+// Gradient stops for the title: pink → purple → cyan.
+var (
+	gradStart = mustHex("#ff79c6")
+	gradMid   = mustHex("#bd93f9")
+	gradEnd   = mustHex("#8be9fd")
+)
+
+func mustHex(s string) colorful.Color {
+	c, err := colorful.Hex(s)
+	if err != nil {
+		panic("ui: bad gradient hex " + s + ": " + err.Error())
+	}
+	return c
+}
+
+// gradientColors returns n colours interpolated across the pink→purple→cyan
+// stops. Endpoints are pinned to the exact stop hexes; n<=0 returns nil.
+func gradientColors(n int) []lipgloss.Color {
+	if n <= 0 {
+		return nil
+	}
+	if n == 1 {
+		return []lipgloss.Color{lipgloss.Color(gradStart.Hex())}
+	}
+	out := make([]lipgloss.Color, n)
+	for i := 0; i < n; i++ {
+		t := float64(i) / float64(n-1) // 0..1
+		var c colorful.Color
+		switch {
+		case t < 0.5:
+			c = gradStart.BlendLab(gradMid, t/0.5)
+		default:
+			c = gradMid.BlendLab(gradEnd, (t-0.5)/0.5)
+		}
+		out[i] = lipgloss.Color(c.Clamped().Hex())
+	}
+	// Pin exact endpoints (blend round-trips can drift by a unit).
+	out[0] = lipgloss.Color(gradStart.Hex())
+	out[n-1] = lipgloss.Color(gradEnd.Hex())
+	return out
+}
+
+// gradientTitle renders s with a per-rune colour gradient.
+func gradientTitle(s string) string {
+	runes := []rune(s)
+	cols := gradientColors(len(runes))
+	var b strings.Builder
+	for i, r := range runes {
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(cols[i]).Render(string(r)))
+	}
+	return b.String()
 }

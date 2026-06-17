@@ -25,7 +25,7 @@ func (m Model) View() string {
 
 func (m Model) viewDashboard() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("fleet — sessions") + "\n\n")
+	b.WriteString(gradientTitle("✨ fleet · your sessions ✨") + "\n\n")
 	if len(m.sessions) == 0 {
 		b.WriteString(dimStyle.Render("no sessions. press n to create one.") + "\n")
 	}
