@@ -60,18 +60,19 @@ func (f *newSessionForm) active() *string {
 
 func (f newSessionForm) view() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("new session — "+f.project.Name) + "\n\n")
+	b.WriteString(gradientTitle("✨ new session — "+f.project.Name+" ✨") + "\n\n")
 	rows := []struct{ label, val string }{
 		{"session", f.sessionName},
 		{"branch", f.branch},
 		{"base", f.base},
 	}
 	for i, r := range rows {
-		marker := "  "
+		line := fmt.Sprintf("%-8s %s", r.label+":", r.val)
 		if i == f.field {
-			marker = "› "
+			b.WriteString(selectedStyle.Render("› "+line) + "\n")
+		} else {
+			b.WriteString("  " + line + "\n")
 		}
-		b.WriteString(fmt.Sprintf("%s%-8s %s\n", marker, r.label+":", r.val))
 	}
 	b.WriteString("\n" + dimStyle.Render("tab next · enter submit on last field · esc cancel"))
 	return b.String()

@@ -301,3 +301,47 @@ func TestDashboardSpinsOnlyWorkingSessions(t *testing.T) {
 		t.Fatalf("did not expect a spinner frame on an exited session.\n---\n%s", out)
 	}
 }
+
+func TestProjectPickerHasFolderMarkers(t *testing.T) {
+	a := Actions{Projects: func() ([]projects.Project, error) {
+		return []projects.Project{{Name: "app"}, {Name: "web"}}, nil
+	}}
+	m := New(&a, nil)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	updated, _ := m.Update(cmd())
+	out := updated.(Model).View()
+	if !strings.Contains(out, "📂 app") || !strings.Contains(out, "📂 web") {
+		t.Fatalf("project picker missing folder markers.\n---\n%s", out)
+	}
+}
+
+func TestCleanupMenuHasEmojiActions(t *testing.T) {
+	m := New(nil, nil)
+	m.sessions = sample()
+	m.cursor = 0
+	m.state = stateCleanupMenu
+	out := m.View()
+	for _, want := range []string{"🗑", "🚀", "👋"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("cleanup menu missing %q.\n---\n%s", want, out)
+		}
+	}
+}
+
+func TestConfirmDialogHasWarning(t *testing.T) {
+	m := New(nil, nil)
+	m.pendingDelete = sample()[0]
+	m.state = stateConfirm
+	out := m.View()
+	if !strings.Contains(out, "⚠️") {
+		t.Fatalf("confirm dialog missing warning marker.\n---\n%s", out)
+	}
+}
+
+func TestNewSessionFormHasFleetTitle(t *testing.T) {
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	out := f.view()
+	if !strings.Contains(out, "app") {
+		t.Fatalf("form title missing project name.\n---\n%s", out)
+	}
+}

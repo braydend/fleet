@@ -89,13 +89,14 @@ func (m Model) viewDashboard() string {
 
 func (m Model) viewProjectPicker() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("pick a project") + "\n\n")
+	b.WriteString(gradientTitle("✨ pick a project ✨") + "\n\n")
 	for i, p := range m.projects {
-		prefix := "  "
+		line := "📂 " + p.Name
 		if i == m.cursor {
-			prefix = "› "
+			b.WriteString(selectedStyle.Render("› "+line) + "\n")
+		} else {
+			b.WriteString("  " + line + "\n")
 		}
-		b.WriteString(prefix + p.Name + "\n")
 	}
 	b.WriteString("\n" + dimStyle.Render("enter select · esc cancel"))
 	return b.String()
@@ -104,14 +105,14 @@ func (m Model) viewProjectPicker() string {
 func (m Model) viewCleanupMenu() string {
 	s, _ := m.selected()
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("cleanup — "+s.Project+"/"+s.Name) + "\n\n")
-	choices := []string{"delete worktree + branch", "push / open PR", "leave (kill tmux only)"}
+	b.WriteString(gradientTitle("✨ cleanup — "+s.Project+"/"+s.Name+" ✨") + "\n\n")
+	choices := []string{"🗑  delete worktree + branch", "🚀 push / open PR", "👋 leave (kill tmux only)"}
 	for i, c := range choices {
-		prefix := "  "
 		if cleanupChoice(i) == m.cleanupChoice {
-			prefix = "› "
+			b.WriteString(selectedStyle.Render("› "+c) + "\n")
+		} else {
+			b.WriteString("  " + c + "\n")
 		}
-		b.WriteString(prefix + c + "\n")
 	}
 	b.WriteString("\n" + dimStyle.Render("enter choose · esc cancel"))
 	return b.String()
@@ -119,7 +120,7 @@ func (m Model) viewCleanupMenu() string {
 
 func (m Model) viewConfirm() string {
 	s := m.pendingDelete
-	return titleStyle.Render("confirm delete") + "\n\n" +
+	return warnStyle.Render("⚠️  confirm delete") + "\n\n" +
 		fmt.Sprintf("%s/%s has uncommitted or unpushed changes.\n", s.Project, s.Name) +
 		"Delete worktree and branch anyway? " + dimStyle.Render("(y/n)")
 }
