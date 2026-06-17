@@ -475,3 +475,17 @@ func TestUpdateConfirmView(t *testing.T) {
 		t.Fatalf("confirm view should show version + prompt: %q", out)
 	}
 }
+
+func TestVersionLabel(t *testing.T) {
+	cases := map[string]string{
+		"":      "",
+		"dev":   "dev",
+		"0.2.0": "v0.2.0",
+		"1.0.0": "v1.0.0",
+	}
+	for in, want := range cases {
+		if got := versionLabel(in); got != want {
+			t.Errorf("versionLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

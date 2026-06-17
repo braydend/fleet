@@ -9,6 +9,19 @@ import (
 	"github.com/bray/fleet/internal/activity"
 )
 
+// versionLabel formats the build version for display. A dev/local build shows
+// "dev" verbatim; a real release X shows "vX"; an empty version shows nothing.
+func versionLabel(v string) string {
+	switch v {
+	case "":
+		return ""
+	case "dev":
+		return "dev"
+	default:
+		return "v" + v
+	}
+}
+
 // View renders the current state.
 func (m Model) View() string {
 	switch m.state {
