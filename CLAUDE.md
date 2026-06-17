@@ -19,6 +19,10 @@ leave). Run with `go run .` (needs `~/.config/fleet/config.yaml` with
 `scan_root` set). Implementation plan:
 `docs/superpowers/plans/2026-06-16-fleet-tui.md`.
 
+Self-update is implemented: on startup (and hourly) fleet checks GitHub Releases
+for a newer version; when one is found a banner appears on the dashboard and
+pressing `u` applies an in-place binary swap (checksum-verified).
+
 ## Build & run
 
 - Build: `go build ./...` (or `go build -o fleet .`)
@@ -82,6 +86,8 @@ sit behind interfaces so domain logic can be unit-tested with fakes.
 - `refresher` — rebuild live session list on tick + on demand.
 - `ui` — Bubble Tea views (project picker, dashboard, new-session form,
   confirm dialogs, status line).
+- `selfupdate` — check GitHub Releases for a newer version, verify asset
+  checksum, and swap the running binary in place.
 
 ## MVP scope
 

@@ -68,6 +68,8 @@ xattr -d com.apple.quarantine ./fleet
 (Alternatively, right-click the binary in Finder and choose **Open** the first
 time.)
 
+Once installed, fleet checks for new releases and can update itself in place — press `u` when the update banner appears.
+
 ### Build from source
 
 Clone and build the binary:
