@@ -1,6 +1,8 @@
 package session
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bray/fleet/internal/config"
@@ -49,7 +51,7 @@ func NewManager(cfg config.Config, t tmuxPort, g git.Git, f forge.PRer, clock fu
 // the shared workspace.
 func (m *Manager) Create(p projects.Project, name, branch, base string) (Session, error) {
 	wt := naming.WorktreePath(m.cfg.WorktreeBaseDir, p.Name, name)
-	if err := m.git.AddWorktree(p.Path, wt, branch, base); err != nil {
+	if err := m.addWorktreeForBranch(p.Path, wt, branch, base); err != nil {
 		return Session{}, err
 	}
 	// Keep fleet's own .fleet/ bookkeeping out of git status and out of the
@@ -75,6 +77,40 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		RepoPath: p.Path, WorktreePath: wt, TmuxName: wname,
 		CreatedAt: now, Alive: true, WindowIndex: idx,
 	}, nil
+}
+
+// addWorktreeForBranch picks the right git worktree command: check out an
+// existing local branch, track a remote-only branch, or create a new branch
+// from base.
+func (m *Manager) addWorktreeForBranch(repoPath, wt, branch, base string) error {
+	local, err := m.git.LocalBranchExists(repoPath, branch)
+	if err != nil {
+		return err
+	}
+	if local {
+		if err := m.git.AddWorktreeExisting(repoPath, wt, branch); err != nil {
+			if isAlreadyCheckedOut(err) {
+				return fmt.Errorf("branch %q is already checked out in another worktree", branch)
+			}
+			return err
+		}
+		return nil
+	}
+	remote, err := m.git.RemoteBranchExists(repoPath, branch)
+	if err != nil {
+		return err
+	}
+	if remote {
+		return m.git.AddWorktreeTracking(repoPath, wt, branch)
+	}
+	return m.git.AddWorktree(repoPath, wt, branch, base)
+}
+
+// isAlreadyCheckedOut detects git's "branch is in use by another worktree"
+// failure across git versions.
+func isAlreadyCheckedOut(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "already checked out") || strings.Contains(s, "already used by worktree")
 }
 
 // EnsureRunning makes sure the session has a live window, creating it if it is

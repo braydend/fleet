@@ -26,6 +26,12 @@ type newSessionForm struct {
 	// branchTouched records whether the user has edited the branch field
 	// directly. Until they do, the branch tracks the (sanitized) session name.
 	branchTouched bool
+	// branch list cached when the form opens, used only for the advisory hint.
+	localBranches  []string
+	remoteBranches []string
+	// fetchWarning is a soft, non-blocking notice shown if the background
+	// `git fetch` failed; branch detection then falls back to local refs.
+	fetchWarning string
 }
 
 // newForm seeds a form for a project with sensible defaults.
@@ -58,6 +64,31 @@ func (f *newSessionForm) active() *string {
 	}
 }
 
+// containsStr reports whether s is in xs.
+func containsStr(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// branchHint classifies the typed branch against the cached lists. Local wins
+// over remote; base is only relevant when the branch is new.
+func (f newSessionForm) branchHint() string {
+	if f.branch == "" {
+		return ""
+	}
+	if containsStr(f.localBranches, f.branch) {
+		return "existing local branch — base ignored"
+	}
+	if containsStr(f.remoteBranches, f.branch) {
+		return "tracks origin/" + f.branch + " — base ignored"
+	}
+	return "new branch from " + f.base
+}
+
 func (f newSessionForm) view() string {
 	var b strings.Builder
 	b.WriteString(gradientTitle("✨ new session — "+f.project.Name+" ✨") + "\n\n")
@@ -73,6 +104,14 @@ func (f newSessionForm) view() string {
 		} else {
 			b.WriteString("  " + line + "\n")
 		}
+		if i == fieldBranch {
+			if h := f.branchHint(); h != "" {
+				b.WriteString("  " + dimStyle.Render("         "+h) + "\n")
+			}
+		}
+	}
+	if f.fetchWarning != "" {
+		b.WriteString("\n" + warnStyle.Render(f.fetchWarning) + "\n")
 	}
 	b.WriteString("\n" + dimStyle.Render("tab next · enter submit on last field · esc cancel"))
 	return b.String()

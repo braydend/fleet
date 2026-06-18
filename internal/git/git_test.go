@@ -121,3 +121,147 @@ func TestRemoveWorktree(t *testing.T) {
 		t.Fatal("expected worktree dir to be gone")
 	}
 }
+
+// contains reports whether s is in xs.
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// repoWithRemoteFeature returns a repo whose origin has a "feature" branch,
+// tracked locally (refs/remotes/origin/feature) with no local branch.
+func repoWithRemoteFeature(t *testing.T) string {
+	t.Helper()
+	repo := newRepo(t)
+	origin := t.TempDir()
+	run(t, origin, "git", "init", "-q", "--bare", "-b", "main")
+	run(t, repo, "git", "remote", "add", "origin", origin)
+	run(t, repo, "git", "push", "-q", "origin", "main")
+	run(t, repo, "git", "branch", "feature", "main")
+	run(t, repo, "git", "push", "-q", "origin", "feature")
+	run(t, repo, "git", "branch", "-D", "feature")
+	run(t, repo, "git", "fetch", "-q", "origin")
+	return repo
+}
+
+func TestLocalBranchExists(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	ok, err := g.LocalBranchExists(repo, "main")
+	if err != nil || !ok {
+		t.Fatalf("expected main to exist: ok=%v err=%v", ok, err)
+	}
+	ok, err = g.LocalBranchExists(repo, "nope")
+	if err != nil || ok {
+		t.Fatalf("expected nope to be absent: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestRemoteBranchExists(t *testing.T) {
+	repo := repoWithRemoteFeature(t)
+	g := New()
+	ok, err := g.RemoteBranchExists(repo, "feature")
+	if err != nil || !ok {
+		t.Fatalf("expected origin/feature to exist: ok=%v err=%v", ok, err)
+	}
+	ok, _ = g.RemoteBranchExists(repo, "missing")
+	if ok {
+		t.Fatal("expected origin/missing to be absent")
+	}
+	// feature must NOT be a local branch.
+	ok, _ = g.LocalBranchExists(repo, "feature")
+	if ok {
+		t.Fatal("feature should be remote-only, not local")
+	}
+}
+
+func TestListBranches(t *testing.T) {
+	repo := repoWithRemoteFeature(t)
+	g := New()
+	br, err := g.ListBranches(repo)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if !contains(br.Local, "main") {
+		t.Fatalf("local missing main: %v", br.Local)
+	}
+	if contains(br.Local, "feature") {
+		t.Fatalf("feature should not be local: %v", br.Local)
+	}
+	if !contains(br.Remote, "feature") {
+		t.Fatalf("remote missing feature: %v", br.Remote)
+	}
+	if contains(br.Remote, "HEAD") {
+		t.Fatalf("HEAD should be excluded from remote: %v", br.Remote)
+	}
+}
+
+func TestFetchPopulatesRemoteRefs(t *testing.T) {
+	repo := repoWithRemoteFeature(t)
+	g := New()
+	// Drop the tracking ref so only Fetch can repopulate it.
+	run(t, repo, "git", "update-ref", "-d", "refs/remotes/origin/feature")
+	if ok, _ := g.RemoteBranchExists(repo, "feature"); ok {
+		t.Fatal("precondition: feature should not be tracked yet")
+	}
+	if err := g.Fetch(repo); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if ok, _ := g.RemoteBranchExists(repo, "feature"); !ok {
+		t.Fatal("expected feature tracked after fetch")
+	}
+}
+
+func TestAddWorktreeExistingChecksOutBranch(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	run(t, repo, "git", "branch", "feature", "main")
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktreeExisting(repo, wt, "feature"); err != nil {
+		t.Fatalf("add existing: %v", err)
+	}
+	st, err := g.Status(wt)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.Branch != "feature" {
+		t.Fatalf("got branch %q", st.Branch)
+	}
+}
+
+func TestAddWorktreeExistingFailsWhenCheckedOut(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	run(t, repo, "git", "branch", "feature", "main")
+	wt1 := filepath.Join(t.TempDir(), "wt1")
+	if err := g.AddWorktreeExisting(repo, wt1, "feature"); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	wt2 := filepath.Join(t.TempDir(), "wt2")
+	if err := g.AddWorktreeExisting(repo, wt2, "feature"); err == nil {
+		t.Fatal("expected error: branch already checked out elsewhere")
+	}
+}
+
+func TestAddWorktreeTrackingCreatesLocalFromRemote(t *testing.T) {
+	repo := repoWithRemoteFeature(t)
+	g := New()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktreeTracking(repo, wt, "feature"); err != nil {
+		t.Fatalf("tracking: %v", err)
+	}
+	st, err := g.Status(wt)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.Branch != "feature" {
+		t.Fatalf("got branch %q", st.Branch)
+	}
+	if ok, _ := g.LocalBranchExists(repo, "feature"); !ok {
+		t.Fatal("expected local feature branch created")
+	}
+}

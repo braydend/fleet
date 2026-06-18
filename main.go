@@ -103,6 +103,17 @@ func run() error {
 			_, err := mgr.Create(p, name, branch, base)
 			return err
 		},
+		Branches: func(p projects.Project) (git.Branches, error) {
+			return g.ListBranches(p.Path)
+		},
+		FetchBranches: func(p projects.Project) (git.Branches, error) {
+			ferr := g.Fetch(p.Path)
+			br, lerr := g.ListBranches(p.Path) // best-effort even if fetch failed
+			if lerr != nil {
+				return git.Branches{}, lerr
+			}
+			return br, ferr
+		},
 		Delete: mgr.Delete,
 		Leave:  mgr.Leave,
 		PushPR: mgr.PushPR,

@@ -1,6 +1,8 @@
 package session
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,10 +17,15 @@ import (
 // --- fakes ---
 
 type fakeGit struct {
-	added   []string // worktree paths added
-	removed []string
-	deleted []string
-	status  git.Status
+	added         []string // worktree paths added
+	removed       []string
+	deleted       []string
+	status        git.Status
+	localExists   map[string]bool
+	remoteExists  map[string]bool
+	addedExisting []string
+	addedTracking []string
+	existingErr   error // returned by AddWorktreeExisting when set
 }
 
 func (f *fakeGit) DefaultBranch(string) (string, error) { return "main", nil }
@@ -31,10 +38,25 @@ func (f *fakeGit) DeleteBranch(_, b string, _ bool) error {
 	f.deleted = append(f.deleted, b)
 	return nil
 }
-func (f *fakeGit) Status(string) (git.Status, error) { return f.status, nil }
-func (f *fakeGit) Push(string, string) error         { return nil }
-func (f *fakeGit) IsRepo(string) bool                { return true }
-func (f *fakeGit) Ignore(string, string) error       { return nil }
+func (f *fakeGit) Status(string) (git.Status, error)            { return f.status, nil }
+func (f *fakeGit) Push(string, string) error                    { return nil }
+func (f *fakeGit) IsRepo(string) bool                           { return true }
+func (f *fakeGit) Ignore(string, string) error                  { return nil }
+func (f *fakeGit) LocalBranchExists(_, b string) (bool, error)  { return f.localExists[b], nil }
+func (f *fakeGit) RemoteBranchExists(_, b string) (bool, error) { return f.remoteExists[b], nil }
+func (f *fakeGit) ListBranches(string) (git.Branches, error)    { return git.Branches{}, nil }
+func (f *fakeGit) Fetch(string) error                           { return nil }
+func (f *fakeGit) AddWorktreeExisting(_, wt, _ string) error {
+	if f.existingErr != nil {
+		return f.existingErr
+	}
+	f.addedExisting = append(f.addedExisting, wt)
+	return nil
+}
+func (f *fakeGit) AddWorktreeTracking(_, wt, _ string) error {
+	f.addedTracking = append(f.addedTracking, wt)
+	return nil
+}
 
 type fakeTmux struct {
 	created   []string // window names created
@@ -181,5 +203,63 @@ func TestSessionHasActivityFields(t *testing.T) {
 	}
 	if s.Activity != activity.Working || s.WindowIndex != 2 {
 		t.Fatalf("unexpected session fields: %+v", s)
+	}
+}
+
+func TestCreateUsesExistingLocalBranch(t *testing.T) {
+	fg := &fakeGit{localExists: map[string]bool{"feature": true}}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "feature", "main"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.addedExisting) != 1 {
+		t.Fatalf("expected existing checkout, got %+v", fg)
+	}
+	if len(fg.added) != 0 || len(fg.addedTracking) != 0 {
+		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+func TestCreateTracksRemoteBranch(t *testing.T) {
+	fg := &fakeGit{remoteExists: map[string]bool{"feature": true}}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "feature", "main"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.addedTracking) != 1 {
+		t.Fatalf("expected tracking checkout, got %+v", fg)
+	}
+	if len(fg.added) != 0 || len(fg.addedExisting) != 0 {
+		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+func TestCreateNewBranchWhenNeitherExists(t *testing.T) {
+	fg := &fakeGit{}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "brand-new", "main"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.added) != 1 {
+		t.Fatalf("expected new-branch worktree, got %+v", fg)
+	}
+	if len(fg.addedExisting) != 0 || len(fg.addedTracking) != 0 {
+		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+func TestCreateExistingBranchCheckedOutElsewhere(t *testing.T) {
+	fg := &fakeGit{
+		localExists: map[string]bool{"feature": true},
+		existingErr: errors.New("fatal: 'feature' is already checked out at '/x'"),
+	}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	_, err := m.Create(proj, "sess", "feature", "main")
+	if err == nil || !strings.Contains(err.Error(), "already checked out in another worktree") {
+		t.Fatalf("expected friendly checked-out error, got %v", err)
 	}
 }
