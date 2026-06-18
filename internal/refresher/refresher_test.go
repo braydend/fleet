@@ -16,14 +16,14 @@ import (
 
 type fakeGit struct{ st git.Status }
 
-func (f fakeGit) DefaultBranch(string) (string, error)     { return "main", nil }
-func (f fakeGit) AddWorktree(_, _, _, _ string) error      { return nil }
-func (f fakeGit) RemoveWorktree(_, _ string, _ bool) error { return nil }
-func (f fakeGit) DeleteBranch(_, _ string, _ bool) error   { return nil }
-func (f fakeGit) Status(string) (git.Status, error)        { return f.st, nil }
-func (f fakeGit) Push(string, string) error                { return nil }
-func (f fakeGit) IsRepo(string) bool                       { return true }
-func (f fakeGit) Ignore(string, string) error              { return nil }
+func (f fakeGit) DefaultBranch(string) (string, error)            { return "main", nil }
+func (f fakeGit) AddWorktree(_, _, _, _ string) error             { return nil }
+func (f fakeGit) RemoveWorktree(_, _ string, _ bool) error        { return nil }
+func (f fakeGit) DeleteBranch(_, _ string, _ bool) error          { return nil }
+func (f fakeGit) Status(string) (git.Status, error)               { return f.st, nil }
+func (f fakeGit) Push(string, string) error                       { return nil }
+func (f fakeGit) IsRepo(string) bool                              { return true }
+func (f fakeGit) Ignore(string, string) error                     { return nil }
 func (f fakeGit) LocalBranchExists(string, string) (bool, error)  { return false, nil }
 func (f fakeGit) RemoteBranchExists(string, string) (bool, error) { return false, nil }
 func (f fakeGit) ListBranches(string) (git.Branches, error)       { return git.Branches{}, nil }
