@@ -519,3 +519,31 @@ func TestVersionLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestBranchesLoadedMsgPopulatesForm(t *testing.T) {
+	m := New(nil, "")
+	m.state = stateNewSession
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	updated, _ := m.Update(branchesLoadedMsg{branches: git.Branches{
+		Local:  []string{"main", "feature"},
+		Remote: []string{"feature", "remote-only"},
+	}})
+	f := updated.(Model).form
+	if !strings.Contains(strings.Join(f.localBranches, ","), "feature") {
+		t.Fatalf("local branches not stored: %v", f.localBranches)
+	}
+	if !strings.Contains(strings.Join(f.remoteBranches, ","), "remote-only") {
+		t.Fatalf("remote branches not stored: %v", f.remoteBranches)
+	}
+}
+
+func TestBranchesRefreshedMsgFetchErrorSetsWarning(t *testing.T) {
+	m := New(nil, "")
+	m.state = stateNewSession
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	updated, _ := m.Update(branchesRefreshedMsg{fetchErr: errors.New("offline")})
+	f := updated.(Model).form
+	if f.fetchWarning == "" {
+		t.Fatal("expected a fetch warning to be set")
+	}
+}

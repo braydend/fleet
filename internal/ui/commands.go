@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/selfupdate"
 	"github.com/bray/fleet/internal/session"
@@ -74,4 +75,37 @@ func applyUpdate(fn func(selfupdate.Release) error, rel selfupdate.Release) tea.
 // scheduleUpdateCheck re-fires an update check after the throttle interval.
 func scheduleUpdateCheck() tea.Cmd {
 	return tea.Tick(selfupdate.CheckInterval, func(time.Time) tea.Msg { return updateTickMsg{} })
+}
+
+type branchesLoadedMsg struct{ branches git.Branches }
+type branchesRefreshedMsg struct {
+	branches git.Branches
+	fetchErr error
+}
+
+// loadBranches lists branches from local refs immediately (works offline) so
+// the form hint is usable right away.
+func loadBranches(fn func(projects.Project) (git.Branches, error), p projects.Project) tea.Cmd {
+	return func() tea.Msg {
+		if fn == nil {
+			return branchesLoadedMsg{}
+		}
+		br, err := fn(p)
+		if err != nil {
+			return errorMsg{err: err}
+		}
+		return branchesLoadedMsg{branches: br}
+	}
+}
+
+// fetchBranches refreshes remote refs in the background, then re-lists. A fetch
+// failure is reported softly via fetchErr; branches still reflect local refs.
+func fetchBranches(fn func(projects.Project) (git.Branches, error), p projects.Project) tea.Cmd {
+	return func() tea.Msg {
+		if fn == nil {
+			return branchesRefreshedMsg{}
+		}
+		br, err := fn(p)
+		return branchesRefreshedMsg{branches: br, fetchErr: err}
+	}
 }

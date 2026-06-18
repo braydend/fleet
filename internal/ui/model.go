@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/selfupdate"
 	"github.com/bray/fleet/internal/session"
@@ -36,8 +37,10 @@ const (
 type Actions struct {
 	Refresh     func() ([]session.Session, error)
 	Projects    func() ([]projects.Project, error)
-	Create      func(p projects.Project, name, branch, base string) error
-	Delete      func(s session.Session, deleteBranch bool) error
+	Create        func(p projects.Project, name, branch, base string) error
+	Branches      func(p projects.Project) (git.Branches, error)
+	FetchBranches func(p projects.Project) (git.Branches, error)
+	Delete        func(s session.Session, deleteBranch bool) error
 	Leave       func(s session.Session) error
 	PushPR      func(s session.Session) error
 	Attach      func(s session.Session) tea.Cmd
@@ -121,6 +124,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = msg.projects
 		m.cursor = 0
 		m.state = stateProjectPicker
+		return m, nil
+
+	case branchesLoadedMsg:
+		if m.state == stateNewSession {
+			m.form.localBranches = msg.branches.Local
+			m.form.remoteBranches = msg.branches.Remote
+		}
+		return m, nil
+
+	case branchesRefreshedMsg:
+		if m.state == stateNewSession {
+			if msg.fetchErr != nil {
+				m.form.fetchWarning = "⚠ couldn't fetch from origin — branch list may be stale"
+			} else {
+				m.form.localBranches = msg.branches.Local
+				m.form.remoteBranches = msg.branches.Remote
+			}
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -217,9 +238,14 @@ func (m Model) keyProjectPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.projects) == 0 {
 			return m, nil
 		}
-		m.form = newForm(m.projects[m.cursor])
+		p := m.projects[m.cursor]
+		m.form = newForm(p)
 		m.state = stateNewSession
 		m.cursor = 0
+		return m, tea.Batch(
+			loadBranches(m.actions.Branches, p),
+			fetchBranches(m.actions.FetchBranches, p),
+		)
 	}
 	return m, nil
 }

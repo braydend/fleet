@@ -26,6 +26,12 @@ type newSessionForm struct {
 	// branchTouched records whether the user has edited the branch field
 	// directly. Until they do, the branch tracks the (sanitized) session name.
 	branchTouched bool
+	// branch list cached when the form opens, used only for the advisory hint.
+	localBranches  []string
+	remoteBranches []string
+	// fetchWarning is a soft, non-blocking notice shown if the background
+	// `git fetch` failed; branch detection then falls back to local refs.
+	fetchWarning string
 }
 
 // newForm seeds a form for a project with sensible defaults.
