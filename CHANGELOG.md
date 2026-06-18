@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/braydend/fleet/compare/v0.3.0...v0.4.0) (2026-06-18)
+
+
+### Features
+
+* **git:** add branch existence, list, and fetch queries ([dc66a8a](https://github.com/braydend/fleet/commit/dc66a8ae40f1cbe9f098bbe9be4a7576bc7dcf2b))
+* **git:** add worktree creators for existing and remote branches ([2ab9848](https://github.com/braydend/fleet/commit/2ab9848b5fb1de34a75304ec929137eb35d4b39a))
+* **session:** create worktrees for existing and remote branches ([8ac0282](https://github.com/braydend/fleet/commit/8ac02824223ce0c32b6f16c4374ca6bd5e15d1b7))
+* **ui:** load branch list when the new-session form opens ([b9c1d97](https://github.com/braydend/fleet/commit/b9c1d97e83c7290aa625c2574b59e5de10d783bf))
+* **ui:** show live branch hint and fetch warning in new-session form ([306ce17](https://github.com/braydend/fleet/commit/306ce1768fdfdb1a1ee4862d5ea2719fb730ed00))
+* wire branch list + fetch actions into the new-session flow ([cc8875a](https://github.com/braydend/fleet/commit/cc8875a3aa399155d8ff1022c7ef3050324ea994))
+
+
+### Bug Fixes
+
+* harden branch-refresh ordering, git locale, and formatting ([8bbad31](https://github.com/braydend/fleet/commit/8bbad3178907574d61a9b82501973f9166486076))
+
 ## [0.3.0](https://github.com/braydend/fleet/compare/v0.2.0...v0.3.0) (2026-06-17)
 
 
