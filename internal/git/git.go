@@ -20,6 +20,13 @@ type Status struct {
 	ChangeCount int
 }
 
+// Branches is the set of branch names known to a repo: local heads and
+// origin-tracked remotes (with the "origin/" prefix stripped, HEAD excluded).
+type Branches struct {
+	Local  []string
+	Remote []string
+}
+
 // Git is the set of git operations fleet needs. Consumers depend on this
 // interface so they can be tested with fakes.
 type Git interface {
@@ -31,6 +38,10 @@ type Git interface {
 	Push(worktreePath, branch string) error
 	IsRepo(path string) bool
 	Ignore(worktreePath, pattern string) error
+	LocalBranchExists(repoPath, branch string) (bool, error)
+	RemoteBranchExists(repoPath, branch string) (bool, error)
+	ListBranches(repoPath string) (Branches, error)
+	Fetch(repoPath string) error
 }
 
 // CLI implements Git by shelling out to the git binary.
@@ -131,6 +142,61 @@ func (c *CLI) Ignore(worktreePath, pattern string) error {
 	}
 	defer f.Close()
 	_, err = f.WriteString(pattern + "\n")
+	return err
+}
+
+// refExists reports whether ref resolves in repoPath. show-ref exits 0 when the
+// ref exists, 1 when it does not, and >1 on a real error.
+func (c *CLI) refExists(repoPath, ref string) (bool, error) {
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", ref)
+	cmd.Dir = repoPath
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("git show-ref %s: %w", ref, err)
+}
+
+func (c *CLI) LocalBranchExists(repoPath, branch string) (bool, error) {
+	return c.refExists(repoPath, "refs/heads/"+branch)
+}
+
+func (c *CLI) RemoteBranchExists(repoPath, branch string) (bool, error) {
+	return c.refExists(repoPath, "refs/remotes/origin/"+branch)
+}
+
+// ListBranches returns local head names and origin remote-tracking names
+// (prefix stripped, HEAD excluded).
+func (c *CLI) ListBranches(repoPath string) (Branches, error) {
+	local, err := c.git(repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if err != nil {
+		return Branches{}, err
+	}
+	remote, err := c.git(repoPath, "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin")
+	if err != nil {
+		return Branches{}, err
+	}
+	var b Branches
+	for _, line := range strings.Split(local, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			b.Local = append(b.Local, line)
+		}
+	}
+	for _, line := range strings.Split(remote, "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "origin/"))
+		if line == "" || line == "HEAD" {
+			continue
+		}
+		b.Remote = append(b.Remote, line)
+	}
+	return b, nil
+}
+
+func (c *CLI) Fetch(repoPath string) error {
+	_, err := c.git(repoPath, "fetch", "origin")
 	return err
 }
 

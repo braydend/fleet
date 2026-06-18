@@ -15,10 +15,12 @@ import (
 // --- fakes ---
 
 type fakeGit struct {
-	added   []string // worktree paths added
-	removed []string
-	deleted []string
-	status  git.Status
+	added        []string // worktree paths added
+	removed      []string
+	deleted      []string
+	status       git.Status
+	localExists  map[string]bool
+	remoteExists map[string]bool
 }
 
 func (f *fakeGit) DefaultBranch(string) (string, error) { return "main", nil }
@@ -35,6 +37,10 @@ func (f *fakeGit) Status(string) (git.Status, error) { return f.status, nil }
 func (f *fakeGit) Push(string, string) error         { return nil }
 func (f *fakeGit) IsRepo(string) bool                { return true }
 func (f *fakeGit) Ignore(string, string) error       { return nil }
+func (f *fakeGit) LocalBranchExists(_, b string) (bool, error)  { return f.localExists[b], nil }
+func (f *fakeGit) RemoteBranchExists(_, b string) (bool, error) { return f.remoteExists[b], nil }
+func (f *fakeGit) ListBranches(string) (git.Branches, error)    { return git.Branches{}, nil }
+func (f *fakeGit) Fetch(string) error                           { return nil }
 
 type fakeTmux struct {
 	created   []string // window names created
