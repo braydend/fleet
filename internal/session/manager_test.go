@@ -1,6 +1,8 @@
 package session
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,5 +203,63 @@ func TestSessionHasActivityFields(t *testing.T) {
 	}
 	if s.Activity != activity.Working || s.WindowIndex != 2 {
 		t.Fatalf("unexpected session fields: %+v", s)
+	}
+}
+
+func TestCreateUsesExistingLocalBranch(t *testing.T) {
+	fg := &fakeGit{localExists: map[string]bool{"feature": true}}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "feature", "main"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.addedExisting) != 1 {
+		t.Fatalf("expected existing checkout, got %+v", fg)
+	}
+	if len(fg.added) != 0 || len(fg.addedTracking) != 0 {
+		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+func TestCreateTracksRemoteBranch(t *testing.T) {
+	fg := &fakeGit{remoteExists: map[string]bool{"feature": true}}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "feature", "main"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.addedTracking) != 1 {
+		t.Fatalf("expected tracking checkout, got %+v", fg)
+	}
+	if len(fg.added) != 0 || len(fg.addedExisting) != 0 {
+		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+func TestCreateNewBranchWhenNeitherExists(t *testing.T) {
+	fg := &fakeGit{}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "brand-new", "main"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.added) != 1 {
+		t.Fatalf("expected new-branch worktree, got %+v", fg)
+	}
+	if len(fg.addedExisting) != 0 || len(fg.addedTracking) != 0 {
+		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+func TestCreateExistingBranchCheckedOutElsewhere(t *testing.T) {
+	fg := &fakeGit{
+		localExists: map[string]bool{"feature": true},
+		existingErr: errors.New("fatal: 'feature' is already checked out at '/x'"),
+	}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	_, err := m.Create(proj, "sess", "feature", "main")
+	if err == nil || !strings.Contains(err.Error(), "already checked out in another worktree") {
+		t.Fatalf("expected friendly checked-out error, got %v", err)
 	}
 }
