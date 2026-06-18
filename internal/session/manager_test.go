@@ -15,12 +15,15 @@ import (
 // --- fakes ---
 
 type fakeGit struct {
-	added        []string // worktree paths added
-	removed      []string
-	deleted      []string
-	status       git.Status
-	localExists  map[string]bool
-	remoteExists map[string]bool
+	added         []string // worktree paths added
+	removed       []string
+	deleted       []string
+	status        git.Status
+	localExists   map[string]bool
+	remoteExists  map[string]bool
+	addedExisting []string
+	addedTracking []string
+	existingErr   error // returned by AddWorktreeExisting when set
 }
 
 func (f *fakeGit) DefaultBranch(string) (string, error) { return "main", nil }
@@ -40,7 +43,18 @@ func (f *fakeGit) Ignore(string, string) error       { return nil }
 func (f *fakeGit) LocalBranchExists(_, b string) (bool, error)  { return f.localExists[b], nil }
 func (f *fakeGit) RemoteBranchExists(_, b string) (bool, error) { return f.remoteExists[b], nil }
 func (f *fakeGit) ListBranches(string) (git.Branches, error)    { return git.Branches{}, nil }
-func (f *fakeGit) Fetch(string) error                           { return nil }
+func (f *fakeGit) Fetch(string) error { return nil }
+func (f *fakeGit) AddWorktreeExisting(_, wt, _ string) error {
+	if f.existingErr != nil {
+		return f.existingErr
+	}
+	f.addedExisting = append(f.addedExisting, wt)
+	return nil
+}
+func (f *fakeGit) AddWorktreeTracking(_, wt, _ string) error {
+	f.addedTracking = append(f.addedTracking, wt)
+	return nil
+}
 
 type fakeTmux struct {
 	created   []string // window names created

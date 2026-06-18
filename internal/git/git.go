@@ -42,6 +42,8 @@ type Git interface {
 	RemoteBranchExists(repoPath, branch string) (bool, error)
 	ListBranches(repoPath string) (Branches, error)
 	Fetch(repoPath string) error
+	AddWorktreeExisting(repoPath, worktreePath, branch string) error
+	AddWorktreeTracking(repoPath, worktreePath, branch string) error
 }
 
 // CLI implements Git by shelling out to the git binary.
@@ -72,6 +74,20 @@ func (c *CLI) DefaultBranch(repoPath string) (string, error) {
 
 func (c *CLI) AddWorktree(repoPath, worktreePath, branch, base string) error {
 	_, err := c.git(repoPath, "worktree", "add", "-b", branch, worktreePath, base)
+	return err
+}
+
+// AddWorktreeExisting checks an existing local branch out into a new worktree.
+// git refuses if the branch is already checked out in another worktree.
+func (c *CLI) AddWorktreeExisting(repoPath, worktreePath, branch string) error {
+	_, err := c.git(repoPath, "worktree", "add", worktreePath, branch)
+	return err
+}
+
+// AddWorktreeTracking creates a local branch tracking origin/<branch> in a new
+// worktree.
+func (c *CLI) AddWorktreeTracking(repoPath, worktreePath, branch string) error {
+	_, err := c.git(repoPath, "worktree", "add", "--track", "-b", branch, worktreePath, "origin/"+branch)
 	return err
 }
 

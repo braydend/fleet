@@ -215,3 +215,53 @@ func TestFetchPopulatesRemoteRefs(t *testing.T) {
 		t.Fatal("expected feature tracked after fetch")
 	}
 }
+
+func TestAddWorktreeExistingChecksOutBranch(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	run(t, repo, "git", "branch", "feature", "main")
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktreeExisting(repo, wt, "feature"); err != nil {
+		t.Fatalf("add existing: %v", err)
+	}
+	st, err := g.Status(wt)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.Branch != "feature" {
+		t.Fatalf("got branch %q", st.Branch)
+	}
+}
+
+func TestAddWorktreeExistingFailsWhenCheckedOut(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	run(t, repo, "git", "branch", "feature", "main")
+	wt1 := filepath.Join(t.TempDir(), "wt1")
+	if err := g.AddWorktreeExisting(repo, wt1, "feature"); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	wt2 := filepath.Join(t.TempDir(), "wt2")
+	if err := g.AddWorktreeExisting(repo, wt2, "feature"); err == nil {
+		t.Fatal("expected error: branch already checked out elsewhere")
+	}
+}
+
+func TestAddWorktreeTrackingCreatesLocalFromRemote(t *testing.T) {
+	repo := repoWithRemoteFeature(t)
+	g := New()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktreeTracking(repo, wt, "feature"); err != nil {
+		t.Fatalf("tracking: %v", err)
+	}
+	st, err := g.Status(wt)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.Branch != "feature" {
+		t.Fatalf("got branch %q", st.Branch)
+	}
+	if ok, _ := g.LocalBranchExists(repo, "feature"); !ok {
+		t.Fatal("expected local feature branch created")
+	}
+}
