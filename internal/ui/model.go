@@ -35,17 +35,17 @@ const (
 
 // Actions the model needs from the rest of the app, injected for testability.
 type Actions struct {
-	Refresh     func() ([]session.Session, error)
-	Projects    func() ([]projects.Project, error)
+	Refresh       func() ([]session.Session, error)
+	Projects      func() ([]projects.Project, error)
 	Create        func(p projects.Project, name, branch, base string) error
 	Branches      func(p projects.Project) (git.Branches, error)
 	FetchBranches func(p projects.Project) (git.Branches, error)
 	Delete        func(s session.Session, deleteBranch bool) error
-	Leave       func(s session.Session) error
-	PushPR      func(s session.Session) error
-	Attach      func(s session.Session) tea.Cmd
-	CheckUpdate func() (selfupdate.CheckResult, error)
-	ApplyUpdate func(selfupdate.Release) error
+	Leave         func(s session.Session) error
+	PushPR        func(s session.Session) error
+	Attach        func(s session.Session) tea.Cmd
+	CheckUpdate   func() (selfupdate.CheckResult, error)
+	ApplyUpdate   func(selfupdate.Release) error
 }
 
 // Model is the root Bubble Tea model.
@@ -135,11 +135,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case branchesRefreshedMsg:
 		if m.state == stateNewSession {
-			if msg.fetchErr != nil {
-				m.form.fetchWarning = "⚠ couldn't fetch from origin — branch list may be stale"
-			} else {
+			if len(msg.branches.Local) > 0 || len(msg.branches.Remote) > 0 {
 				m.form.localBranches = msg.branches.Local
 				m.form.remoteBranches = msg.branches.Remote
+			}
+			if msg.fetchErr != nil {
+				m.form.fetchWarning = "⚠ couldn't fetch from origin — branch list may be stale"
 			}
 		}
 		return m, nil

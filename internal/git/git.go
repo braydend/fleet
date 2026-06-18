@@ -55,6 +55,7 @@ func New() *CLI { return &CLI{} }
 func (c *CLI) git(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -166,6 +167,7 @@ func (c *CLI) Ignore(worktreePath, pattern string) error {
 func (c *CLI) refExists(repoPath, ref string) (bool, error) {
 	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", ref)
 	cmd.Dir = repoPath
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	err := cmd.Run()
 	if err == nil {
 		return true, nil

@@ -38,14 +38,14 @@ func (f *fakeGit) DeleteBranch(_, b string, _ bool) error {
 	f.deleted = append(f.deleted, b)
 	return nil
 }
-func (f *fakeGit) Status(string) (git.Status, error) { return f.status, nil }
-func (f *fakeGit) Push(string, string) error         { return nil }
-func (f *fakeGit) IsRepo(string) bool                { return true }
-func (f *fakeGit) Ignore(string, string) error       { return nil }
+func (f *fakeGit) Status(string) (git.Status, error)            { return f.status, nil }
+func (f *fakeGit) Push(string, string) error                    { return nil }
+func (f *fakeGit) IsRepo(string) bool                           { return true }
+func (f *fakeGit) Ignore(string, string) error                  { return nil }
 func (f *fakeGit) LocalBranchExists(_, b string) (bool, error)  { return f.localExists[b], nil }
 func (f *fakeGit) RemoteBranchExists(_, b string) (bool, error) { return f.remoteExists[b], nil }
 func (f *fakeGit) ListBranches(string) (git.Branches, error)    { return git.Branches{}, nil }
-func (f *fakeGit) Fetch(string) error { return nil }
+func (f *fakeGit) Fetch(string) error                           { return nil }
 func (f *fakeGit) AddWorktreeExisting(_, wt, _ string) error {
 	if f.existingErr != nil {
 		return f.existingErr
