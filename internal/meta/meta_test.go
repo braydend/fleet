@@ -43,3 +43,43 @@ func TestReadMalformedReturnsError(t *testing.T) {
 		t.Fatal("expected error reading malformed meta")
 	}
 }
+
+func TestWriteThenReadIncludesClaudeSessionID(t *testing.T) {
+	dir := t.TempDir()
+	in := Meta{
+		Project:         "My App",
+		Session:         "fix-bug",
+		Branch:          "fleet/fix-bug",
+		Base:            "main",
+		RepoPath:        "/repos/my-app",
+		CreatedAt:       time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC),
+		CleanupIntent:   "delete",
+		ClaudeSessionID: "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+	}
+	if err := Write(dir, in); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := Read(dir)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got != in {
+		t.Fatalf("round-trip mismatch:\n got %+v\nwant %+v", got, in)
+	}
+}
+
+func TestReadLegacyMetaWithoutSessionID(t *testing.T) {
+	dir := t.TempDir()
+	// A meta.json written before this field existed must still read cleanly.
+	legacy := `{"project":"p","session":"s","branch":"b","base":"main","repo_path":"/r","created_at":"2026-06-16T10:00:00Z"}`
+	if err := writeRaw(dir, []byte(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Read(dir)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got.ClaudeSessionID != "" {
+		t.Fatalf("legacy meta should have empty ClaudeSessionID, got %q", got.ClaudeSessionID)
+	}
+}
