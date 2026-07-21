@@ -90,7 +90,7 @@ func run() error {
 	statePath := selfupdate.StatePath()
 	checker := selfupdate.Checker{Repo: repo, Client: http.DefaultClient}
 	applier := selfupdate.Applier{Client: http.DefaultClient, Updater: selfupdate.MinioUpdater{}}
-	mgr := session.NewManager(cfg, tm, g, fg, time.Now)
+	mgr := session.NewManager(cfg, tm, g, fg, time.Now, nil)
 
 	actions := ui.Actions{
 		Refresh: func() ([]session.Session, error) {
