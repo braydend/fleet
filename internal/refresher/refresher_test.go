@@ -79,6 +79,7 @@ func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	_ = meta.Write(wtA, meta.Meta{
 		Project: "My App", Session: "alive", Branch: "fleet/alive", Base: "main",
 		RepoPath: "/code/my-app", CreatedAt: time.Unix(1, 0).UTC(),
+		ClaudeSessionID: "alive-session-id",
 	})
 	wtD := naming.WorktreePath(base, "My App", "dead")
 	_ = meta.Write(wtD, meta.Meta{
@@ -107,6 +108,9 @@ func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 		case "alive":
 			if !s.Alive || s.Exited || s.Activity != activity.Working || s.WindowIndex != 1 {
 				t.Fatalf("alive session wrong: %+v", s)
+			}
+			if s.ClaudeSessionID != "alive-session-id" {
+				t.Fatalf("expected ClaudeSessionID carried from meta, got %q", s.ClaudeSessionID)
 			}
 		case "dead":
 			if s.Alive || !s.Exited || s.Activity != activity.Exited {

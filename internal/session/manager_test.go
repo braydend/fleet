@@ -59,14 +59,17 @@ func (f *fakeGit) AddWorktreeTracking(_, wt, _ string) error {
 }
 
 type fakeTmux struct {
-	created   []string // window names created
-	killed    []string // targets killed
-	respawned []string // targets respawned
-	windows   map[string]tmux.Window
+	created       []string // window names created
+	createdCmds   []string // launch commands passed to CreateWindow
+	killed        []string // targets killed
+	respawned     []string // targets respawned
+	respawnedCmds []string // launch commands passed to RespawnWindow
+	windows       map[string]tmux.Window
 }
 
-func (f *fakeTmux) CreateWindow(name, _, _ string) (int, error) {
+func (f *fakeTmux) CreateWindow(name, _, cmd string) (int, error) {
 	f.created = append(f.created, name)
+	f.createdCmds = append(f.createdCmds, cmd)
 	if f.windows == nil {
 		f.windows = map[string]tmux.Window{}
 	}
@@ -78,8 +81,9 @@ func (f *fakeTmux) KillWindow(target string) error {
 	f.killed = append(f.killed, target)
 	return nil
 }
-func (f *fakeTmux) RespawnWindow(target, _, _ string) error {
+func (f *fakeTmux) RespawnWindow(target, _, cmd string) error {
 	f.respawned = append(f.respawned, target)
+	f.respawnedCmds = append(f.respawnedCmds, cmd)
 	return nil
 }
 func (f *fakeTmux) LookupWindow(name string) (tmux.Window, bool) {
@@ -90,7 +94,10 @@ func (f *fakeTmux) LookupWindow(name string) (tmux.Window, bool) {
 func newManager(t *testing.T, g git.Git, tm tmuxPort) (*Manager, config.Config) {
 	cfg := config.Config{ScanRoot: "/code", WorktreeBaseDir: t.TempDir()}
 	fixed := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	m := NewManager(cfg, tm, g, nil, func() time.Time { return fixed })
+	m := NewManager(cfg, tm, g, nil,
+		func() time.Time { return fixed },
+		func() string { return "test-session-id" },
+	)
 	return m, cfg
 }
 
@@ -119,6 +126,16 @@ func TestCreateAddsWorktreeMetaAndTmux(t *testing.T) {
 	}
 	if s.TmuxName != "fleet-My_App-fix_bug" || !s.Alive || s.WindowIndex != 1 {
 		t.Fatalf("unexpected session: %+v", s)
+	}
+	if md.ClaudeSessionID != "test-session-id" {
+		t.Fatalf("expected stored session ID, got %q", md.ClaudeSessionID)
+	}
+	if s.ClaudeSessionID != "test-session-id" {
+		t.Fatalf("expected session ID on returned session, got %q", s.ClaudeSessionID)
+	}
+	wantCmd := "claude --session-id test-session-id -n 'My App/fix-bug'"
+	if len(ft.createdCmds) != 1 || ft.createdCmds[0] != wantCmd {
+		t.Fatalf("create launch cmd = %v, want %q", ft.createdCmds, wantCmd)
 	}
 	_ = cfg
 }
@@ -192,6 +209,44 @@ func TestEnsureRunningRespawnsWhenDead(t *testing.T) {
 	}
 	if len(ft.respawned) != 1 || ft.respawned[0] != "fleet-workspace:fleet-p-s" {
 		t.Fatalf("expected respawn for a dead window, got %v", ft.respawned)
+	}
+}
+
+func TestEnsureRunningResumesWhenMissing(t *testing.T) {
+	ft := &fakeTmux{}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt", ClaudeSessionID: "sid-1"}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	want := "claude --resume sid-1 || claude --session-id sid-1 -n 'p/s' || claude"
+	if len(ft.createdCmds) != 1 || ft.createdCmds[0] != want {
+		t.Fatalf("missing-window cmd = %v, want %q", ft.createdCmds, want)
+	}
+}
+
+func TestEnsureRunningRespawnUsesResumeChain(t *testing.T) {
+	ft := &fakeTmux{windows: map[string]tmux.Window{"fleet-p-s": {Index: 1, Name: "fleet-p-s", Dead: true}}}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt", ClaudeSessionID: "sid-1"}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	want := "claude --resume sid-1 || claude --session-id sid-1 -n 'p/s' || claude"
+	if len(ft.respawnedCmds) != 1 || ft.respawnedCmds[0] != want {
+		t.Fatalf("respawn cmd = %v, want %q", ft.respawnedCmds, want)
+	}
+}
+
+func TestEnsureRunningLegacyLaunchesBareClaude(t *testing.T) {
+	ft := &fakeTmux{}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt"} // no ClaudeSessionID
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if len(ft.createdCmds) != 1 || ft.createdCmds[0] != "claude" {
+		t.Fatalf("legacy cmd = %v, want [claude]", ft.createdCmds)
 	}
 }
 

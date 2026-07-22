@@ -23,6 +23,12 @@ Self-update is implemented: on startup (and hourly) fleet checks GitHub Releases
 for a newer version; when one is found a banner appears on the dashboard and
 pressing `u` applies an in-place binary swap (checksum-verified).
 
+Session resume is implemented: each session is created with a stable Claude
+Code session ID (stored in `.fleet/meta.json`) and launched with `--session-id`;
+every re-launch (respawn or after a fleet/machine restart) resumes that ID, so
+conversation context survives. Sessions created before this feature launch a
+fresh `claude`.
+
 ## Build & run
 
 Build/test/run commands live in [`CONTRIBUTING.md`](CONTRIBUTING.md#build--run);
