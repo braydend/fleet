@@ -32,7 +32,7 @@ func launchResume(id, name string) string {
 }
 
 // shellQuote wraps s in single quotes safe for `sh -c` (tmux runs the window
-// command through the shell), escaping embedded single quotes as '\”.
+// command through the shell), escaping any embedded single quote.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

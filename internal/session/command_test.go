@@ -28,6 +28,8 @@ func TestLaunchResume(t *testing.T) {
 		{"legacy empty id", "", "p/s", "claude"},
 		{"id and name", "abc-123", "My App/fix bug",
 			`claude --resume abc-123 || claude --session-id abc-123 -n 'My App/fix bug' || claude`},
+		{"name with single quote", "abc-123", "o'brien/x",
+			`claude --resume abc-123 || claude --session-id abc-123 -n 'o'\''brien/x' || claude`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
