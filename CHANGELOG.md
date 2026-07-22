@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/braydend/fleet/compare/v0.4.0...v0.5.0) (2026-07-22)
+
+
+### Features
+
+* add Claude launch-command builders with resume chain ([6f22b07](https://github.com/braydend/fleet/commit/6f22b070b4ced69eb6d06a1cc4e8ed1bc6402b58))
+* add crypto/rand UUIDv4 generator for Claude session IDs ([19fe2b6](https://github.com/braydend/fleet/commit/19fe2b686ab3e8914e2a8e54cfbdb708b2f57f20))
+* carry Claude session ID from meta into session model ([36e30f5](https://github.com/braydend/fleet/commit/36e30f5e83efb55c749a86fc18bacc019f745a4f))
+* launch Claude with stable session ID and resume on re-launch ([09c2ff1](https://github.com/braydend/fleet/commit/09c2ff1b070241b25b76699ddd2f4343a3d51789))
+* persist Claude session ID in worktree meta ([2543789](https://github.com/braydend/fleet/commit/254378900a9f1e46a8741c2b1af84c9edce66e77))
+* resume Claude Code sessions via stable session IDs ([#29](https://github.com/braydend/fleet/issues/29)) ([240d98e](https://github.com/braydend/fleet/commit/240d98e56e94cfed6722de51c636805cad10f259))
+
+
+### Bug Fixes
+
+* correct shellQuote doc comment and cover launchResume escaping ([24af6f6](https://github.com/braydend/fleet/commit/24af6f64397ed05569be03ca7d30cc09c0d6296d))
+
 ## [0.4.0](https://github.com/braydend/fleet/compare/v0.3.0...v0.4.0) (2026-06-18)
 
 
