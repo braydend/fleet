@@ -1,6 +1,7 @@
 # Fleet — cleaning up broken worktrees
 
 **Date:** 2026-07-28
+**Issue:** [#32](https://github.com/braydend/fleet/issues/32) — session cleanup fails permanently when the worktree contains undeletable files
 **Status:** Design — approved, pending implementation plan
 **Relates to:** [`2026-06-16-fleet-tui-design.md`](2026-06-16-fleet-tui-design.md) (state management approach C)
 

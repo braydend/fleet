@@ -3,6 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** [`docs/superpowers/specs/2026-07-28-broken-worktree-cleanup-design.md`](../specs/2026-07-28-broken-worktree-cleanup-design.md)
+**Issue:** [#32](https://github.com/braydend/fleet/issues/32)
 
 **Goal:** A session delete can never strand an un-removable session on the dashboard. fleet removes the worktree tree itself (best-effort, continuing past files it cannot delete), reconciles the git registry with `git worktree prune`, always forgets the session, and reports any files left on disk. Worktrees git no longer recognises render as **broken** with a single-option cleanup menu.
 
