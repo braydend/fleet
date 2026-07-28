@@ -12,7 +12,10 @@ import (
 )
 
 // Messages exchanged inside the program.
-type sessionsUpdatedMsg struct{ sessions []session.Session }
+type sessionsUpdatedMsg struct {
+	sessions []session.Session
+	notice   string // status-line message from the action that triggered this refresh
+}
 type errorMsg struct{ err error }
 type tickMsg struct{}
 type updateAvailableMsg struct{ res selfupdate.CheckResult }

@@ -30,8 +30,26 @@ const (
 	cleanupDelete cleanupChoice = iota
 	cleanupPushPR
 	cleanupLeave
-	cleanupChoiceCount
 )
+
+type cleanupOption struct {
+	choice cleanupChoice
+	label  string
+}
+
+// cleanupOptions returns the cleanup menu for a session. A broken session has
+// no usable worktree, so pushing and leaving are meaningless — cleanup is the
+// only thing left to do with it.
+func cleanupOptions(s session.Session) []cleanupOption {
+	if s.Broken {
+		return []cleanupOption{{cleanupDelete, "🧹 clean up (remove broken session)"}}
+	}
+	return []cleanupOption{
+		{cleanupDelete, "🗑  delete worktree + branch"},
+		{cleanupPushPR, "🚀 push / open PR"},
+		{cleanupLeave, "👋 leave (kill tmux only)"},
+	}
+}
 
 // Actions the model needs from the rest of the app, injected for testability.
 type Actions struct {
@@ -40,7 +58,7 @@ type Actions struct {
 	Create        func(p projects.Project, name, branch, base string) error
 	Branches      func(p projects.Project) (git.Branches, error)
 	FetchBranches func(p projects.Project) (git.Branches, error)
-	Delete        func(s session.Session, deleteBranch bool) error
+	Delete        func(s session.Session, deleteBranch bool) (session.DeleteResult, error)
 	Leave         func(s session.Session) error
 	PushPR        func(s session.Session) error
 	Attach        func(s session.Session) tea.Cmd
@@ -67,7 +85,7 @@ type Model struct {
 	form     newSessionForm
 
 	// cleanup sub-state
-	cleanupChoice cleanupChoice
+	cleanupIndex  int             // index into cleanupOptions(selected session)
 	pendingDelete session.Session // awaiting confirm
 
 	// self-update sub-state
@@ -104,6 +122,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// in the background without changing the current screen — flows that
 		// should return to the dashboard set the state themselves.
 		m.sessions = msg.sessions
+		// A periodic refresh carries no notice, so it never clobbers a message
+		// left by the last action.
+		if msg.notice != "" {
+			m.status = msg.notice
+		}
 		// Only the dashboard uses cursor to index sessions; don't disturb the
 		// selection on other screens (the picker indexes projects).
 		if m.state == stateDashboard && m.cursor >= len(m.sessions) {
@@ -212,7 +235,7 @@ func (m Model) keyDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		if _, ok := m.selected(); ok {
 			m.state = stateCleanupMenu
-			m.cleanupChoice = cleanupDelete
+			m.cleanupIndex = 0
 		}
 	case "u":
 		if m.updateAvailable {
@@ -314,38 +337,45 @@ func (m Model) selected() (session.Session, bool) {
 }
 
 func (m Model) keyCleanupMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s, ok := m.selected()
+	if !ok {
+		m.state = stateDashboard
+		return m, nil
+	}
+	opts := cleanupOptions(s)
 	switch msg.String() {
 	case "esc":
 		m.state = stateDashboard
 	case "up", "k":
-		if m.cleanupChoice > 0 {
-			m.cleanupChoice--
+		if m.cleanupIndex > 0 {
+			m.cleanupIndex--
 		}
 	case "down", "j":
-		if m.cleanupChoice < cleanupChoiceCount-1 {
-			m.cleanupChoice++
+		if m.cleanupIndex < len(opts)-1 {
+			m.cleanupIndex++
 		}
 	case "enter":
-		s, ok := m.selected()
-		if !ok {
+		if m.cleanupIndex >= len(opts) {
 			m.state = stateDashboard
 			return m, nil
 		}
-		switch m.cleanupChoice {
+		switch opts[m.cleanupIndex].choice {
 		case cleanupLeave:
 			m.state = stateDashboard
-			return m, m.runThenRefresh(func() error { return m.callLeave(s) })
+			return m, m.runThenRefresh(func() (string, error) { return "", m.callLeave(s) })
 		case cleanupPushPR:
 			m.state = stateDashboard
-			return m, m.runThenRefresh(func() error { return m.callPushPR(s) })
+			return m, m.runThenRefresh(func() (string, error) { return "", m.callPushPR(s) })
 		case cleanupDelete:
-			if s.Git.Dirty || s.Git.Ahead > 0 {
+			// A broken session has no readable git status, so there is nothing
+			// to warn about — go straight to the cleanup.
+			if !s.Broken && (s.Git.Dirty || s.Git.Ahead > 0) {
 				m.pendingDelete = s
 				m.state = stateConfirm
 				return m, nil
 			}
 			m.state = stateDashboard
-			return m, m.runThenRefresh(func() error { return m.callDelete(s) })
+			return m, m.runThenRefresh(func() (string, error) { return m.callDelete(s) })
 		}
 	}
 	return m, nil
@@ -356,7 +386,7 @@ func (m Model) keyConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "y", "enter":
 		s := m.pendingDelete
 		m.state = stateDashboard
-		return m, m.runThenRefresh(func() error { return m.callDelete(s) })
+		return m, m.runThenRefresh(func() (string, error) { return m.callDelete(s) })
 	case "n", "esc":
 		m.state = stateDashboard
 	}
@@ -381,11 +411,19 @@ func (m Model) callLeave(s session.Session) error {
 	}
 	return nil
 }
-func (m Model) callDelete(s session.Session) error {
-	if m.actions.Delete != nil {
-		return m.actions.Delete(s, true) // delete branch too
+func (m Model) callDelete(s session.Session) (string, error) {
+	if m.actions.Delete == nil {
+		return "", nil
 	}
-	return nil
+	res, err := m.actions.Delete(s, true) // delete branch too
+	if err != nil {
+		return "", err
+	}
+	if res.Leftover != "" {
+		return fmt.Sprintf("⚠ cleaned up %s/%s — %d files left at %s (sudo rm -rf to reclaim)",
+			s.Project, s.Name, res.LeftoverCount, res.Leftover), nil
+	}
+	return fmt.Sprintf("✓ deleted %s/%s", s.Project, s.Name), nil
 }
 func (m Model) callPushPR(s session.Session) error {
 	if m.actions.PushPR != nil {
@@ -394,11 +432,14 @@ func (m Model) callPushPR(s session.Session) error {
 	return nil
 }
 
-// runThenRefresh runs fn, then refreshes the session list.
-func (m Model) runThenRefresh(fn func() error) tea.Cmd {
+// runThenRefresh runs fn, then refreshes the session list. fn's string is an
+// optional status-line notice, carried back with the refreshed list so the
+// message and the new state land in one update.
+func (m Model) runThenRefresh(fn func() (string, error)) tea.Cmd {
 	refreshFn := m.actions.Refresh
 	return func() tea.Msg {
-		if err := fn(); err != nil {
+		notice, err := fn()
+		if err != nil {
 			return errorMsg{err: err}
 		}
 		if refreshFn != nil {
@@ -406,9 +447,9 @@ func (m Model) runThenRefresh(fn func() error) tea.Cmd {
 			if err != nil {
 				return errorMsg{err: err}
 			}
-			return sessionsUpdatedMsg{sessions: ss}
+			return sessionsUpdatedMsg{sessions: ss, notice: notice}
 		}
-		return sessionsUpdatedMsg{}
+		return sessionsUpdatedMsg{notice: notice}
 	}
 }
 

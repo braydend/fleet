@@ -238,7 +238,7 @@ func TestCleanupLeaveCallsLeave(t *testing.T) {
 	m.sessions = sample()
 	m.cursor = 0
 	m.state = stateCleanupMenu
-	m.cleanupChoice = cleanupLeave
+	m.cleanupIndex = 2 // leave is the third option for a healthy session
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected command")
@@ -254,10 +254,85 @@ func TestDeleteDirtyRequiresConfirm(t *testing.T) {
 	m.sessions = sample() // session "a" is dirty
 	m.cursor = 0
 	m.state = stateCleanupMenu
-	m.cleanupChoice = cleanupDelete
+	m.cleanupIndex = 0 // delete is the first option
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if updated.(Model).state != stateConfirm {
 		t.Fatal("expected confirm state for dirty delete")
+	}
+}
+
+func TestDashboardRendersBrokenSession(t *testing.T) {
+	ss := sample()
+	ss[0].Broken = true
+	m := New(nil, "")
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: ss})
+	out := updated.(Model).View()
+
+	if !strings.Contains(out, brokenIcon) {
+		t.Errorf("expected the broken glyph on the dashboard.\n---\n%s", out)
+	}
+	if !strings.Contains(out, "broken · worktree missing from git") {
+		t.Errorf("expected a broken detail line.\n---\n%s", out)
+	}
+	if !strings.Contains(out, brokenIcon+" broken") {
+		t.Errorf("expected the legend to explain the broken glyph.\n---\n%s", out)
+	}
+}
+
+func TestBrokenSessionCleanupMenuOffersOnlyCleanup(t *testing.T) {
+	ss := sample()
+	ss[0].Broken = true
+	m := New(nil, "")
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: ss})
+	withMenu, _ := updated.(Model).Update(keyMsg("d"))
+	out := withMenu.(Model).View()
+
+	if strings.Contains(out, "push / open PR") || strings.Contains(out, "leave (kill tmux only)") {
+		t.Errorf("a broken session has no worktree to push or leave.\n---\n%s", out)
+	}
+	if !strings.Contains(out, "clean up") {
+		t.Errorf("expected a clean-up option.\n---\n%s", out)
+	}
+}
+
+func TestBrokenSessionDeleteSkipsDirtyConfirm(t *testing.T) {
+	ss := sample()
+	ss[0].Broken = true // sample()[0] is also dirty; broken must win
+	m := New(nil, "")
+	m.sessions = ss
+	m.cursor = 0
+	m.state = stateCleanupMenu
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if updated.(Model).state == stateConfirm {
+		t.Fatal("a broken session has no readable git status to confirm against")
+	}
+}
+
+func TestDeleteReportsLeftoverFilesInStatus(t *testing.T) {
+	ss := sample()
+	ss[0].Git = git.Status{} // sample()[0] is dirty; clean it so delete skips the confirm screen
+	acts := Actions{
+		Delete: func(session.Session, bool) (session.DeleteResult, error) {
+			return session.DeleteResult{
+				Leftover:      "/wt/proj/sess",
+				LeftoverCount: 42,
+				Samples:       []string{"/wt/proj/sess/vendor"},
+			}, nil
+		},
+		Refresh: func() ([]session.Session, error) { return nil, nil },
+	}
+	m := New(&acts, "")
+	updated, _ := m.Update(sessionsUpdatedMsg{sessions: ss})
+	withMenu, _ := updated.(Model).Update(keyMsg("d"))
+	afterEnter, cmd := withMenu.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected a delete command")
+	}
+	final, _ := afterEnter.(Model).Update(cmd())
+	out := final.(Model).View()
+
+	if !strings.Contains(out, "/wt/proj/sess") || !strings.Contains(out, "42") {
+		t.Errorf("expected the leftover path and count in the status line.\n---\n%s", out)
 	}
 }
 

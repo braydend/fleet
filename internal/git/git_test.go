@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -107,18 +108,53 @@ func TestIgnoreKeepsFleetMetaOutOfStatus(t *testing.T) {
 	}
 }
 
-func TestRemoveWorktree(t *testing.T) {
+func TestPruneWorktreesReconcilesRegistry(t *testing.T) {
 	repo := newRepo(t)
 	g := New()
 	wt := filepath.Join(t.TempDir(), "wt")
 	if err := g.AddWorktree(repo, wt, "fleet/x", "main"); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.RemoveWorktree(repo, wt, true); err != nil {
-		t.Fatalf("remove: %v", err)
+	// Simulate fleet having removed the tree itself.
+	if err := os.RemoveAll(wt); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(wt); !os.IsNotExist(err) {
-		t.Fatal("expected worktree dir to be gone")
+
+	if err := g.PruneWorktrees(repo); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	out, err := g.git(repo, "worktree", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, wt) {
+		t.Fatalf("expected %s to be pruned from the registry:\n%s", wt, out)
+	}
+	// Idempotent: a second prune is a no-op, not an error.
+	if err := g.PruneWorktrees(repo); err != nil {
+		t.Fatalf("second prune: %v", err)
+	}
+}
+
+func TestIsWorktree(t *testing.T) {
+	repo := newRepo(t)
+	g := New()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktree(repo, wt, "fleet/x", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if !g.IsWorktree(wt) {
+		t.Error("expected a freshly added worktree to be recognised")
+	}
+	// The state left behind by a partially failed removal.
+	if err := os.Remove(filepath.Join(wt, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if g.IsWorktree(wt) {
+		t.Error("expected a worktree without .git to be unrecognised")
+	}
+	if g.IsWorktree(t.TempDir()) {
+		t.Error("expected a plain directory to be unrecognised")
 	}
 }
 

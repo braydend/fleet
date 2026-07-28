@@ -75,6 +75,8 @@ Each package does one thing, testable in isolation. Adapters (`tmux`, `git`)
 sit behind interfaces so domain logic can be unit-tested with fakes.
 
 - `config` — load/validate `~/.config/fleet/config.yaml`.
+- `cleanup` — best-effort recursive removal of a worktree directory, reporting
+  what it could not delete.
 - `projects` — scan root dir, discover git repos.
 - `tmux` — adapter over the tmux CLI (list/create/kill/attach/liveness).
 - `git` — worktree + branch ops, status queries, push, `gh` PR open.

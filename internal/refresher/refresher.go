@@ -78,9 +78,15 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 			}
 			state := activity.Classify(w.LastActivity, now(), tail, !present, w.Dead)
 
-			st, err := g.Status(wt)
-			if err != nil {
-				st = git.Status{Branch: md.Branch}
+			// A worktree git no longer tracks is broken: its files survive but
+			// it has no .git, so every git query against it would fail. Skip
+			// the doomed Status subprocess and fall back to the meta branch.
+			broken := !g.IsWorktree(wt)
+			st := git.Status{Branch: md.Branch}
+			if !broken {
+				if s, err := g.Status(wt); err == nil {
+					st = s
+				}
 			}
 
 			s := session.Session{
@@ -94,6 +100,7 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 				CreatedAt:       md.CreatedAt,
 				Alive:           alive,
 				Exited:          !alive,
+				Broken:          broken,
 				Activity:        state,
 				LastActivity:    w.LastActivity,
 				WindowIndex:     w.Index,

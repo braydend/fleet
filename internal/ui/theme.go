@@ -30,6 +30,11 @@ var (
 
 // activityIcon returns the emoji shown for a session's state. Emoji are used
 // for every state (not just some) so the 2-cell width keeps columns aligned.
+// brokenIcon marks a session whose worktree git no longer tracks. It is not an
+// activity.State: activity is what Claude is doing, broken is worktree
+// integrity, and the two are independent.
+const brokenIcon = "🚫"
+
 func activityIcon(s activity.State) string {
 	switch s {
 	case activity.Working:

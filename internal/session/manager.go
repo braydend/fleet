@@ -2,9 +2,12 @@ package session
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/bray/fleet/internal/cleanup"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/forge"
 	"github.com/bray/fleet/internal/git"
@@ -34,6 +37,9 @@ type Manager struct {
 	forge forge.PRer
 	clock func() time.Time
 	newID func() string
+
+	// removeTree deletes a worktree directory best-effort; injectable for tests.
+	removeTree func(string) (cleanup.Removal, error)
 }
 
 // NewManager builds a Manager. clock is injectable for deterministic tests; pass
@@ -47,7 +53,10 @@ func NewManager(cfg config.Config, t tmuxPort, g git.Git, f forge.PRer, clock fu
 	if newID == nil {
 		newID = naming.NewClaudeSessionID
 	}
-	return &Manager{cfg: cfg, tmux: t, git: g, forge: f, clock: clock, newID: newID}
+	return &Manager{
+		cfg: cfg, tmux: t, git: g, forge: f, clock: clock, newID: newID,
+		removeTree: cleanup.RemoveTree,
+	}
 }
 
 // Create makes the worktree, writes meta, and launches the session's window in
@@ -140,19 +149,76 @@ func (m *Manager) Leave(s Session) error {
 	return nil
 }
 
-// Delete kills the session's window, removes the worktree, and optionally
-// deletes the branch.
-func (m *Manager) Delete(s Session, deleteBranch bool) error {
-	_ = m.tmux.KillWindow(naming.WindowTarget(s.Project, s.Name))
-	if err := m.git.RemoveWorktree(s.RepoPath, s.WorktreePath, true); err != nil {
-		return err
+// DeleteResult reports what a Delete left behind on disk.
+type DeleteResult struct {
+	Leftover      string // worktree path if files survived; "" when fully clean
+	LeftoverCount int
+	Samples       []string
+}
+
+// Delete kills the session's window, removes the worktree, reconciles the
+// repo's worktree registry, and optionally deletes the branch.
+//
+// Files it cannot delete — typically root-owned output written by a container
+// into the bind-mounted worktree — do not fail the delete. The session is
+// always forgotten (meta removed, registry pruned, branch deleted) and the
+// leftovers are reported, so a blocked file can never strand an un-removable
+// session on the dashboard.
+func (m *Manager) Delete(s Session, deleteBranch bool) (DeleteResult, error) {
+	// Safety net: fleet deletes trees itself now, so refuse anything that is
+	// not strictly inside its own worktree base dir. A corrupt meta must never
+	// be able to point the walk at a real repo.
+	if !underBase(m.cfg.WorktreeBaseDir, s.WorktreePath) {
+		return DeleteResult{}, fmt.Errorf("refusing to delete %s: outside worktree base dir %s",
+			s.WorktreePath, m.cfg.WorktreeBaseDir)
+	}
+
+	_ = m.tmux.KillWindow(naming.WindowTarget(s.Project, s.Name)) // ignore: may already be gone
+
+	rem, err := m.removeTree(s.WorktreePath)
+	if err != nil {
+		return DeleteResult{}, err
+	}
+
+	// Whatever survived, make sure the directory is neither a git worktree nor
+	// a fleet session any more, so neither git nor the dashboard keeps tracking
+	// it. Both live at the top of the worktree and are fleet/git-owned, so they
+	// are removable even when the tree below is not.
+	_ = os.RemoveAll(filepath.Join(s.WorktreePath, ".git"))
+	_ = os.RemoveAll(filepath.Join(s.WorktreePath, ".fleet"))
+	if _, statErr := os.Stat(meta.Path(s.WorktreePath)); statErr == nil {
+		return DeleteResult{}, fmt.Errorf("could not remove %s: the session would stay on the dashboard",
+			meta.Path(s.WorktreePath))
+	}
+
+	if err := m.git.PruneWorktrees(s.RepoPath); err != nil {
+		return DeleteResult{}, err
 	}
 	if deleteBranch {
+		// After the prune git no longer believes the branch is checked out, so
+		// this succeeds even for a worktree whose files could not be removed.
 		if err := m.git.DeleteBranch(s.RepoPath, s.Branch, true); err != nil {
-			return err
+			return DeleteResult{}, err
 		}
 	}
-	return nil
+
+	if rem.Complete() {
+		return DeleteResult{}, nil
+	}
+	return DeleteResult{
+		Leftover:      s.WorktreePath,
+		LeftoverCount: rem.BlockedCount,
+		Samples:       rem.Blocked,
+	}, nil
+}
+
+// underBase reports whether path sits strictly inside base.
+func underBase(base, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // PushPR pushes the branch and, if a forge is configured and available, opens a

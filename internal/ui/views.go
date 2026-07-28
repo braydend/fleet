@@ -70,11 +70,22 @@ func (m Model) viewDashboard() string {
 		if s.WindowIndex > 0 {
 			num = fmt.Sprintf("%d", s.WindowIndex)
 		}
-		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, activityIcon(s.Activity), s.Name, s.Branch, s.Base)
+		icon := activityIcon(s.Activity)
+		if s.Broken {
+			icon = brokenIcon
+		}
+		identity := fmt.Sprintf("%s %s %s  %s ← %s", num, icon, s.Name, s.Branch, s.Base)
 		if i == m.cursor {
 			cur.lines = append(cur.lines, selectedStyle.Render("› "+identity))
 		} else {
 			cur.lines = append(cur.lines, "  "+identity)
+		}
+
+		if s.Broken {
+			// No git status to report — the worktree is not a worktree.
+			cur.lines = append(cur.lines,
+				warnStyle.Render("    broken · worktree missing from git · d to clean up"))
+			continue
 		}
 
 		// Detail line: activity word, git state, age. Working sessions get the
@@ -120,9 +131,9 @@ func (m Model) viewDashboard() string {
 	}
 
 	// Legend for the activity glyphs, below the boxes and above the keybinds.
-	legend := fmt.Sprintf("legend: %s working  %s waiting  %s idle  %s exited",
+	legend := fmt.Sprintf("legend: %s working  %s waiting  %s idle  %s exited  %s broken",
 		activityIcon(activity.Working), activityIcon(activity.Waiting),
-		activityIcon(activity.Idle), activityIcon(activity.Exited))
+		activityIcon(activity.Idle), activityIcon(activity.Exited), brokenIcon)
 	b.WriteString("\n" + dimStyle.Render(legend))
 	if m.updateAvailable {
 		banner := fmt.Sprintf("⬆ update available: v%s → press u to update", m.updateLatest)
@@ -158,12 +169,14 @@ func (m Model) viewCleanupMenu() string {
 	s, _ := m.selected()
 	var b strings.Builder
 	b.WriteString(gradientTitle("✨ cleanup — "+s.Project+"/"+s.Name+" ✨") + "\n\n")
-	choices := []string{"🗑  delete worktree + branch", "🚀 push / open PR", "👋 leave (kill tmux only)"}
-	for i, c := range choices {
-		if cleanupChoice(i) == m.cleanupChoice {
-			b.WriteString(selectedStyle.Render("› "+c) + "\n")
+	if s.Broken {
+		b.WriteString(warnStyle.Render("this worktree is no longer registered with git") + "\n\n")
+	}
+	for i, o := range cleanupOptions(s) {
+		if i == m.cleanupIndex {
+			b.WriteString(selectedStyle.Render("› "+o.label) + "\n")
 		} else {
-			b.WriteString("  " + c + "\n")
+			b.WriteString("  " + o.label + "\n")
 		}
 	}
 	b.WriteString("\n" + dimStyle.Render("enter choose · esc cancel"))

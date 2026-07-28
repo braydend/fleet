@@ -14,11 +14,15 @@ import (
 	"github.com/bray/fleet/internal/tmux"
 )
 
-type fakeGit struct{ st git.Status }
+type fakeGit struct {
+	st          git.Status
+	notWorktree bool // when true, IsWorktree reports false for every path
+}
 
 func (f fakeGit) DefaultBranch(string) (string, error)            { return "main", nil }
 func (f fakeGit) AddWorktree(_, _, _, _ string) error             { return nil }
-func (f fakeGit) RemoveWorktree(_, _ string, _ bool) error        { return nil }
+func (f fakeGit) PruneWorktrees(string) error                     { return nil }
+func (f fakeGit) IsWorktree(string) bool                          { return !f.notWorktree }
 func (f fakeGit) DeleteBranch(_, _ string, _ bool) error          { return nil }
 func (f fakeGit) Status(string) (git.Status, error)               { return f.st, nil }
 func (f fakeGit) Push(string, string) error                       { return nil }
@@ -123,5 +127,39 @@ func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	target := naming.WindowTarget("My App", "alive")
 	if ft.labels[target] == "" {
 		t.Fatalf("expected a label set for %q, got %v", target, ft.labels)
+	}
+}
+
+func TestBuildMarksUnregisteredWorktreeBroken(t *testing.T) {
+	base := t.TempDir()
+	cfg := config.Config{ScanRoot: "/code", WorktreeBaseDir: base}
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+
+	wt := naming.WorktreePath(base, "My App", "orphan")
+	_ = meta.Write(wt, meta.Meta{
+		Project: "My App", Session: "orphan", Branch: "fleet/orphan", Base: "main",
+		RepoPath: "/code/my-app", CreatedAt: time.Unix(1, 0).UTC(),
+	})
+	ft := &fakeTmux{}
+
+	healthy, err := Build(cfg, ft, fakeGit{st: git.Status{Branch: "fleet/orphan"}}, clock)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if len(healthy) != 1 || healthy[0].Broken {
+		t.Fatalf("expected a healthy session, got %+v", healthy)
+	}
+
+	broken, err := Build(cfg, ft, fakeGit{notWorktree: true}, clock)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if len(broken) != 1 || !broken[0].Broken {
+		t.Fatalf("expected the session to be marked broken, got %+v", broken)
+	}
+	// Branch still comes from meta so the row remains identifiable.
+	if broken[0].Branch != "fleet/orphan" {
+		t.Errorf("expected the meta branch to survive on a broken session, got %q", broken[0].Branch)
 	}
 }
