@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bray/fleet/internal/cleanup"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
@@ -113,8 +114,11 @@ func TestSmokeRealAdapters(t *testing.T) {
 	}
 
 	// Remove worktree -> it disappears from the list.
-	if err := g.RemoveWorktree(repo, wt, true); err != nil {
+	if _, err := cleanup.RemoveTree(wt); err != nil {
 		t.Fatalf("remove worktree: %v", err)
+	}
+	if err := g.PruneWorktrees(repo); err != nil {
+		t.Fatalf("prune: %v", err)
 	}
 	sessions, err = Build(cfg, tm, g, time.Now)
 	if err != nil {

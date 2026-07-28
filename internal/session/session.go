@@ -20,6 +20,7 @@ type Session struct {
 	CreatedAt    time.Time
 	Alive        bool // window exists and process is running
 	Exited       bool // worktree exists but window is missing or dead
+	Broken       bool // worktree directory exists but git no longer tracks it
 	Activity     activity.State
 	LastActivity time.Time
 	WindowIndex  int // 1-based tab number; 0 if no live window
