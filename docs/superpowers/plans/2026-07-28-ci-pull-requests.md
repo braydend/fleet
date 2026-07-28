@@ -381,11 +381,11 @@ Add at the end of the `jobs:` block, after `test`:
 ```
 
 - `if: github.event_name == 'pull_request'` — commit messages are immutable once merged, so re-validating on `main` could only ever produce a failure nobody can act on.
-- `fetch-depth: 0` is belt-and-braces. For `pull_request` events the action
-  reads commit messages from the GitHub API (`pulls.listCommits`), not from
-  local history, so a shallow checkout would do — but a full fetch costs
-  nothing on a repo this size and keeps the job correct if the trigger ever
-  widens to `push`, where local history *is* used.
+- `fetch-depth: 0` is harmless belt-and-braces, not a requirement. This
+  action never reads local git history: for `pull_request` events it fetches
+  commit messages from the GitHub API (`pulls.listCommits`), and for `push`
+  events from `repos.compareCommits`. A shallow checkout would work just as
+  well; a full fetch costs nothing on a repo this size, so it stays.
 - commitlint ignores merge commits by default. At PR time no merge commit
   exists yet, so this matters only if the trigger ever widens beyond
   `pull_request`.

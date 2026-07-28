@@ -153,11 +153,11 @@ correct for a squash-merge repository — would protect nothing here. commitlint
 ignores merge commits by default — though at PR time no merge commit exists
 yet, so that only matters if the trigger ever widens beyond `pull_request`.
 
-`fetch-depth: 0` is belt-and-braces: for `pull_request` events the action
-reads commit messages from the GitHub API (`pulls.listCommits`) rather than
-local history, so a shallow checkout would suffice — but a full fetch is
-negligible on a repo this size and keeps the job correct if the trigger ever
-widens to `push`, where local history is used.
+`fetch-depth: 0` is harmless belt-and-braces rather than a requirement.
+This action never reads local git history — for `pull_request` events it
+fetches commit messages from the GitHub API (`pulls.listCommits`), and for
+`push` events from `repos.compareCommits` — so a shallow checkout would work
+just as well. A full fetch is negligible on a repo this size, so it stays.
 
 ### Configuration file
 
