@@ -173,9 +173,11 @@ func (c *CLI) Ignore(worktreePath, pattern string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.WriteString(pattern + "\n")
-	return err
+	if _, err := f.WriteString(pattern + "\n"); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // refExists reports whether ref resolves in repoPath. show-ref exits 0 when the

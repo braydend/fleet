@@ -61,7 +61,7 @@ func (c Checker) Check(current string) (CheckResult, error) {
 	if err != nil {
 		return CheckResult{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return CheckResult{}, fmt.Errorf("github returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
