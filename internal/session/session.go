@@ -25,4 +25,7 @@ type Session struct {
 	LastActivity time.Time
 	WindowIndex  int // 1-based tab number; 0 if no live window
 	Git          git.Status
+	// ClaudeSessionID is the stable Claude Code session ID fleet resumes on
+	// re-launch. Empty for sessions created before this feature (launch bare).
+	ClaudeSessionID string
 }

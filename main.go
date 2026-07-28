@@ -90,7 +90,7 @@ func run() error {
 	statePath := selfupdate.StatePath()
 	checker := selfupdate.Checker{Repo: repo, Client: http.DefaultClient}
 	applier := selfupdate.Applier{Client: http.DefaultClient, Updater: selfupdate.MinioUpdater{}}
-	mgr := session.NewManager(cfg, tm, g, fg, time.Now)
+	mgr := session.NewManager(cfg, tm, g, fg, time.Now, nil)
 
 	actions := ui.Actions{
 		Refresh: func() ([]session.Session, error) {
@@ -102,6 +102,17 @@ func run() error {
 		Create: func(p projects.Project, name, branch, base string) error {
 			_, err := mgr.Create(p, name, branch, base)
 			return err
+		},
+		Branches: func(p projects.Project) (git.Branches, error) {
+			return g.ListBranches(p.Path)
+		},
+		FetchBranches: func(p projects.Project) (git.Branches, error) {
+			ferr := g.Fetch(p.Path)
+			br, lerr := g.ListBranches(p.Path) // best-effort even if fetch failed
+			if lerr != nil {
+				return git.Branches{}, lerr
+			}
+			return br, ferr
 		},
 		Delete: mgr.Delete,
 		Leave:  mgr.Leave,

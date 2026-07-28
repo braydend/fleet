@@ -4,6 +4,24 @@ This is the canonical guide for developing `fleet`. It is the single source of
 truth for the development workflow; `CLAUDE.md` defers here for those rules and
 keeps only the architecture context an agent needs.
 
+## Prerequisites
+
+Install these before building or running. On a clean machine the build fails
+until they are present:
+
+- **Go 1.26.4 or newer** — required to build; `go.mod` declares `go 1.26.4`, so
+  older toolchains are rejected. A clean machine has no `go` on PATH at all
+  (`command not found: go`). Install with `brew install go` (macOS) or from
+  <https://go.dev/dl/>. Verify with `go version`.
+- **Runtime CLIs on PATH** — `fleet` shells out to these at runtime, so `go run .`
+  needs them even though `go build ./...` does not:
+  - `git` — worktree and branch operations (usually preinstalled on macOS).
+  - `tmux` — the execution backend; **not preinstalled on macOS**, install with
+    `brew install tmux`. Without it the unit tests still pass (integration tests
+    skip when the binary is absent) but the app cannot create sessions.
+  - `gh` — GitHub CLI, used for PR creation (`brew install gh`).
+  - `claude` — the Claude Code CLI that each session runs.
+
 ## Build & run
 
 - Build: `go build ./...` (or `go build -o fleet .`)

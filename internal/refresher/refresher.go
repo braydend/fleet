@@ -90,21 +90,22 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 			}
 
 			s := session.Session{
-				Project:      md.Project,
-				Name:         md.Session,
-				Branch:       md.Branch,
-				Base:         md.Base,
-				RepoPath:     md.RepoPath,
-				WorktreePath: wt,
-				TmuxName:     wname,
-				CreatedAt:    md.CreatedAt,
-				Alive:        alive,
-				Exited:       !alive,
-				Broken:       broken,
-				Activity:     state,
-				LastActivity: w.LastActivity,
-				WindowIndex:  w.Index,
-				Git:          st,
+				Project:         md.Project,
+				Name:            md.Session,
+				Branch:          md.Branch,
+				Base:            md.Base,
+				RepoPath:        md.RepoPath,
+				WorktreePath:    wt,
+				TmuxName:        wname,
+				CreatedAt:       md.CreatedAt,
+				Alive:           alive,
+				Exited:          !alive,
+				Broken:          broken,
+				Activity:        state,
+				LastActivity:    w.LastActivity,
+				WindowIndex:     w.Index,
+				Git:             st,
+				ClaudeSessionID: md.ClaudeSessionID,
 			}
 			out = append(out, s)
 

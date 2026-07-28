@@ -17,9 +17,6 @@ import (
 	"github.com/bray/fleet/internal/tmux"
 )
 
-// claudeCommand is the command launched inside each session's tmux window.
-const claudeCommand = "claude"
-
 // tmuxPort is the subset of the tmux adapter the manager uses for window-based
 // session lifecycle. Note the asymmetric addressing: CreateWindow and
 // LookupWindow take a bare window name (the workspace is implied), while
@@ -39,25 +36,34 @@ type Manager struct {
 	git   git.Git
 	forge forge.PRer
 	clock func() time.Time
+	newID func() string
 
 	// removeTree deletes a worktree directory best-effort; injectable for tests.
 	removeTree func(string) (cleanup.Removal, error)
 }
 
 // NewManager builds a Manager. clock is injectable for deterministic tests; pass
-// time.Now in production. forge may be nil if PR creation is unavailable.
-func NewManager(cfg config.Config, t tmuxPort, g git.Git, f forge.PRer, clock func() time.Time) *Manager {
+// time.Now in production. forge may be nil if PR creation is unavailable. newID
+// is injectable for deterministic tests; pass nil in production to default to
+// naming.NewClaudeSessionID.
+func NewManager(cfg config.Config, t tmuxPort, g git.Git, f forge.PRer, clock func() time.Time, newID func() string) *Manager {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Manager{cfg: cfg, tmux: t, git: g, forge: f, clock: clock, removeTree: cleanup.RemoveTree}
+	if newID == nil {
+		newID = naming.NewClaudeSessionID
+	}
+	return &Manager{
+		cfg: cfg, tmux: t, git: g, forge: f, clock: clock, newID: newID,
+		removeTree: cleanup.RemoveTree,
+	}
 }
 
 // Create makes the worktree, writes meta, and launches the session's window in
 // the shared workspace.
 func (m *Manager) Create(p projects.Project, name, branch, base string) (Session, error) {
 	wt := naming.WorktreePath(m.cfg.WorktreeBaseDir, p.Name, name)
-	if err := m.git.AddWorktree(p.Path, wt, branch, base); err != nil {
+	if err := m.addWorktreeForBranch(p.Path, wt, branch, base); err != nil {
 		return Session{}, err
 	}
 	// Keep fleet's own .fleet/ bookkeeping out of git status and out of the
@@ -66,15 +72,16 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		return Session{}, err
 	}
 	now := m.clock()
+	sessionID := m.newID()
 	md := meta.Meta{
 		Project: p.Name, Session: name, Branch: branch, Base: base,
-		RepoPath: p.Path, CreatedAt: now,
+		RepoPath: p.Path, CreatedAt: now, ClaudeSessionID: sessionID,
 	}
 	if err := meta.Write(wt, md); err != nil {
 		return Session{}, err
 	}
 	wname := naming.TmuxName(p.Name, name)
-	idx, err := m.tmux.CreateWindow(wname, wt, claudeCommand)
+	idx, err := m.tmux.CreateWindow(wname, wt, launchFresh(sessionID, p.Name+"/"+name))
 	if err != nil {
 		return Session{}, err
 	}
@@ -82,20 +89,56 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		Project: p.Name, Name: name, Branch: branch, Base: base,
 		RepoPath: p.Path, WorktreePath: wt, TmuxName: wname,
 		CreatedAt: now, Alive: true, WindowIndex: idx,
+		ClaudeSessionID: sessionID,
 	}, nil
+}
+
+// addWorktreeForBranch picks the right git worktree command: check out an
+// existing local branch, track a remote-only branch, or create a new branch
+// from base.
+func (m *Manager) addWorktreeForBranch(repoPath, wt, branch, base string) error {
+	local, err := m.git.LocalBranchExists(repoPath, branch)
+	if err != nil {
+		return err
+	}
+	if local {
+		if err := m.git.AddWorktreeExisting(repoPath, wt, branch); err != nil {
+			if isAlreadyCheckedOut(err) {
+				return fmt.Errorf("branch %q is already checked out in another worktree", branch)
+			}
+			return err
+		}
+		return nil
+	}
+	remote, err := m.git.RemoteBranchExists(repoPath, branch)
+	if err != nil {
+		return err
+	}
+	if remote {
+		return m.git.AddWorktreeTracking(repoPath, wt, branch)
+	}
+	return m.git.AddWorktree(repoPath, wt, branch, base)
+}
+
+// isAlreadyCheckedOut detects git's "branch is in use by another worktree"
+// failure across git versions.
+func isAlreadyCheckedOut(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "already checked out") || strings.Contains(s, "already used by worktree")
 }
 
 // EnsureRunning makes sure the session has a live window, creating it if it is
 // missing (e.g. a pre-upgrade session) or respawning it if its process exited.
 // Safe to call right before attaching.
 func (m *Manager) EnsureRunning(s Session) error {
+	cmd := launchResume(s.ClaudeSessionID, s.Project+"/"+s.Name)
 	w, ok := m.tmux.LookupWindow(s.TmuxName)
 	if !ok {
-		_, err := m.tmux.CreateWindow(s.TmuxName, s.WorktreePath, claudeCommand)
+		_, err := m.tmux.CreateWindow(s.TmuxName, s.WorktreePath, cmd)
 		return err
 	}
 	if w.Dead {
-		return m.tmux.RespawnWindow(naming.WindowTarget(s.Project, s.Name), s.WorktreePath, claudeCommand)
+		return m.tmux.RespawnWindow(naming.WindowTarget(s.Project, s.Name), s.WorktreePath, cmd)
 	}
 	return nil
 }

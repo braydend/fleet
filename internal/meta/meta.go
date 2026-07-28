@@ -11,13 +11,14 @@ import (
 
 // Meta is the persisted metadata for one session, stored inside its worktree.
 type Meta struct {
-	Project       string    `json:"project"`
-	Session       string    `json:"session"`
-	Branch        string    `json:"branch"`
-	Base          string    `json:"base"`
-	RepoPath      string    `json:"repo_path"`
-	CreatedAt     time.Time `json:"created_at"`
-	CleanupIntent string    `json:"cleanup_intent,omitempty"`
+	Project         string    `json:"project"`
+	Session         string    `json:"session"`
+	Branch          string    `json:"branch"`
+	Base            string    `json:"base"`
+	RepoPath        string    `json:"repo_path"`
+	CreatedAt       time.Time `json:"created_at"`
+	CleanupIntent   string    `json:"cleanup_intent,omitempty"`
+	ClaudeSessionID string    `json:"claude_session_id,omitempty"`
 }
 
 // dir returns the .fleet directory inside a worktree.

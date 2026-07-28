@@ -19,15 +19,21 @@ type fakeGit struct {
 	notWorktree bool // when true, IsWorktree reports false for every path
 }
 
-func (f fakeGit) DefaultBranch(string) (string, error)   { return "main", nil }
-func (f fakeGit) AddWorktree(_, _, _, _ string) error    { return nil }
-func (f fakeGit) PruneWorktrees(string) error            { return nil }
-func (f fakeGit) IsWorktree(string) bool                 { return !f.notWorktree }
-func (f fakeGit) DeleteBranch(_, _ string, _ bool) error { return nil }
-func (f fakeGit) Status(string) (git.Status, error)      { return f.st, nil }
-func (f fakeGit) Push(string, string) error              { return nil }
-func (f fakeGit) IsRepo(string) bool                     { return true }
-func (f fakeGit) Ignore(string, string) error            { return nil }
+func (f fakeGit) DefaultBranch(string) (string, error)            { return "main", nil }
+func (f fakeGit) AddWorktree(_, _, _, _ string) error             { return nil }
+func (f fakeGit) PruneWorktrees(string) error                     { return nil }
+func (f fakeGit) IsWorktree(string) bool                          { return !f.notWorktree }
+func (f fakeGit) DeleteBranch(_, _ string, _ bool) error          { return nil }
+func (f fakeGit) Status(string) (git.Status, error)               { return f.st, nil }
+func (f fakeGit) Push(string, string) error                       { return nil }
+func (f fakeGit) IsRepo(string) bool                              { return true }
+func (f fakeGit) Ignore(string, string) error                     { return nil }
+func (f fakeGit) LocalBranchExists(string, string) (bool, error)  { return false, nil }
+func (f fakeGit) RemoteBranchExists(string, string) (bool, error) { return false, nil }
+func (f fakeGit) ListBranches(string) (git.Branches, error)       { return git.Branches{}, nil }
+func (f fakeGit) Fetch(string) error                              { return nil }
+func (f fakeGit) AddWorktreeExisting(_, _, _ string) error        { return nil }
+func (f fakeGit) AddWorktreeTracking(_, _, _ string) error        { return nil }
 
 type fakeTmux struct {
 	windows []tmux.Window
@@ -77,6 +83,7 @@ func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	_ = meta.Write(wtA, meta.Meta{
 		Project: "My App", Session: "alive", Branch: "fleet/alive", Base: "main",
 		RepoPath: "/code/my-app", CreatedAt: time.Unix(1, 0).UTC(),
+		ClaudeSessionID: "alive-session-id",
 	})
 	wtD := naming.WorktreePath(base, "My App", "dead")
 	_ = meta.Write(wtD, meta.Meta{
@@ -105,6 +112,9 @@ func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 		case "alive":
 			if !s.Alive || s.Exited || s.Activity != activity.Working || s.WindowIndex != 1 {
 				t.Fatalf("alive session wrong: %+v", s)
+			}
+			if s.ClaudeSessionID != "alive-session-id" {
+				t.Fatalf("expected ClaudeSessionID carried from meta, got %q", s.ClaudeSessionID)
 			}
 		case "dead":
 			if s.Alive || !s.Exited || s.Activity != activity.Exited {

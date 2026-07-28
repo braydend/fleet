@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.5.0](https://github.com/braydend/fleet/compare/v0.4.0...v0.5.0) (2026-07-22)
+
+
+### Features
+
+* add Claude launch-command builders with resume chain ([6f22b07](https://github.com/braydend/fleet/commit/6f22b070b4ced69eb6d06a1cc4e8ed1bc6402b58))
+* add crypto/rand UUIDv4 generator for Claude session IDs ([19fe2b6](https://github.com/braydend/fleet/commit/19fe2b686ab3e8914e2a8e54cfbdb708b2f57f20))
+* carry Claude session ID from meta into session model ([36e30f5](https://github.com/braydend/fleet/commit/36e30f5e83efb55c749a86fc18bacc019f745a4f))
+* launch Claude with stable session ID and resume on re-launch ([09c2ff1](https://github.com/braydend/fleet/commit/09c2ff1b070241b25b76699ddd2f4343a3d51789))
+* persist Claude session ID in worktree meta ([2543789](https://github.com/braydend/fleet/commit/254378900a9f1e46a8741c2b1af84c9edce66e77))
+* resume Claude Code sessions via stable session IDs ([#29](https://github.com/braydend/fleet/issues/29)) ([240d98e](https://github.com/braydend/fleet/commit/240d98e56e94cfed6722de51c636805cad10f259))
+
+
+### Bug Fixes
+
+* correct shellQuote doc comment and cover launchResume escaping ([24af6f6](https://github.com/braydend/fleet/commit/24af6f64397ed05569be03ca7d30cc09c0d6296d))
+
+## [0.4.0](https://github.com/braydend/fleet/compare/v0.3.0...v0.4.0) (2026-06-18)
+
+
+### Features
+
+* **git:** add branch existence, list, and fetch queries ([dc66a8a](https://github.com/braydend/fleet/commit/dc66a8ae40f1cbe9f098bbe9be4a7576bc7dcf2b))
+* **git:** add worktree creators for existing and remote branches ([2ab9848](https://github.com/braydend/fleet/commit/2ab9848b5fb1de34a75304ec929137eb35d4b39a))
+* **session:** create worktrees for existing and remote branches ([8ac0282](https://github.com/braydend/fleet/commit/8ac02824223ce0c32b6f16c4374ca6bd5e15d1b7))
+* **ui:** load branch list when the new-session form opens ([b9c1d97](https://github.com/braydend/fleet/commit/b9c1d97e83c7290aa625c2574b59e5de10d783bf))
+* **ui:** show live branch hint and fetch warning in new-session form ([306ce17](https://github.com/braydend/fleet/commit/306ce1768fdfdb1a1ee4862d5ea2719fb730ed00))
+* wire branch list + fetch actions into the new-session flow ([cc8875a](https://github.com/braydend/fleet/commit/cc8875a3aa399155d8ff1022c7ef3050324ea994))
+
+
+### Bug Fixes
+
+* harden branch-refresh ordering, git locale, and formatting ([8bbad31](https://github.com/braydend/fleet/commit/8bbad3178907574d61a9b82501973f9166486076))
+
 ## [0.3.0](https://github.com/braydend/fleet/compare/v0.2.0...v0.3.0) (2026-06-17)
 
 
