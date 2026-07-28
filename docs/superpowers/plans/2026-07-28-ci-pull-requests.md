@@ -381,8 +381,14 @@ Add at the end of the `jobs:` block, after `test`:
 ```
 
 - `if: github.event_name == 'pull_request'` — commit messages are immutable once merged, so re-validating on `main` could only ever produce a failure nobody can act on.
-- `fetch-depth: 0` ensures the PR base commit is present locally for the range walk. The repository is small; a full fetch is negligible.
-- commitlint ignores merge commits by default, so the `Merge pull request #NN` commits are not flagged.
+- `fetch-depth: 0` is belt-and-braces. For `pull_request` events the action
+  reads commit messages from the GitHub API (`pulls.listCommits`), not from
+  local history, so a shallow checkout would do — but a full fetch costs
+  nothing on a repo this size and keeps the job correct if the trigger ever
+  widens to `push`, where local history *is* used.
+- commitlint ignores merge commits by default. At PR time no merge commit
+  exists yet, so this matters only if the trigger ever widens beyond
+  `pull_request`.
 
 - [ ] **Step 5: Re-validate the workflow file**
 

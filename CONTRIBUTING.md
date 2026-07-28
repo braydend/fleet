@@ -25,13 +25,22 @@ until they are present:
 ## Build & run
 
 - Build: `go build ./...` (or `go build -o fleet .`)
-- Test: `go test ./...` (git/tmux integration tests skip if those binaries are
-  absent). A build-tagged real-CLI smoke test lives in `internal/refresher`:
-  `go test -tags smoke -run Smoke ./internal/refresher/`.
+- Test: `go test -race ./...` (git/tmux integration tests skip if those
+  binaries are absent — install both to actually run them).
+- Smoke tests: `go test -race -tags smoke -run Smoke ./...` — build-tagged
+  real-CLI tests in `internal/refresher` and `internal/selfupdate`.
 - Vet: `go vet ./...`
+- Format: `gofmt -l .` — must print nothing.
+- Lint: `golangci-lint run --build-tags=smoke ./...`, or without installing it:
+  `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --build-tags=smoke ./...`
 - Run: `go run .` — requires `git`, `tmux`, and `claude` on PATH. On first run
   (no config file) it prompts for `scan_root` and writes the config; thereafter
   it loads `~/.config/fleet/config.yaml`.
+
+Every check above runs on each pull request via
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml), which also validates
+commit messages with commitlint. The checks are advisory — they report on the
+PR but do not block merging.
 
 See [`docs/usage.md`](docs/usage.md) for the full configuration reference.
 

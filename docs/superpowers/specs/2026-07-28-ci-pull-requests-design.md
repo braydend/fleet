@@ -150,11 +150,14 @@ Validation covers **every commit in the PR**, not the PR title. This repository
 merges with merge commits (`Merge pull request #NN from …`), so each individual
 commit lands on `main` and is parsed by release-please. A PR-title check —
 correct for a squash-merge repository — would protect nothing here. commitlint
-ignores merge commits by default, so the merge commits themselves are not
-flagged.
+ignores merge commits by default — though at PR time no merge commit exists
+yet, so that only matters if the trigger ever widens beyond `pull_request`.
 
-`fetch-depth: 0` ensures the PR base commit is present locally for the range
-walk; the repository is small enough that a full fetch is negligible.
+`fetch-depth: 0` is belt-and-braces: for `pull_request` events the action
+reads commit messages from the GitHub API (`pulls.listCommits`) rather than
+local history, so a shallow checkout would suffice — but a full fetch is
+negligible on a repo this size and keeps the job correct if the trigger ever
+widens to `push`, where local history is used.
 
 ### Configuration file
 
