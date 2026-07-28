@@ -1,10 +1,13 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/cleanup"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
@@ -16,17 +19,18 @@ import (
 
 type fakeGit struct {
 	added   []string // worktree paths added
-	removed []string
+	pruned  []string // repo paths pruned
 	deleted []string
 	status  git.Status
 }
 
 func (f *fakeGit) DefaultBranch(string) (string, error) { return "main", nil }
 func (f *fakeGit) AddWorktree(_, wt, _, _ string) error { f.added = append(f.added, wt); return nil }
-func (f *fakeGit) RemoveWorktree(_, wt string, _ bool) error {
-	f.removed = append(f.removed, wt)
+func (f *fakeGit) PruneWorktrees(repo string) error {
+	f.pruned = append(f.pruned, repo)
 	return nil
 }
+func (f *fakeGit) IsWorktree(string) bool { return true }
 func (f *fakeGit) DeleteBranch(_, b string, _ bool) error {
 	f.deleted = append(f.deleted, b)
 	return nil
@@ -109,31 +113,113 @@ func TestLeaveKillsWindowOnly(t *testing.T) {
 	if err := m.Leave(s); err != nil {
 		t.Fatalf("leave: %v", err)
 	}
-	if len(ft.killed) != 1 || ft.killed[0] != "fleet-workspace:fleet-p-s" || len(fg.removed) != 0 {
-		t.Fatalf("leave should kill window only: killed=%v removed=%v", ft.killed, fg.removed)
+	if len(ft.killed) != 1 || ft.killed[0] != "fleet-workspace:fleet-p-s" || len(fg.pruned) != 0 {
+		t.Fatalf("leave should kill window only: killed=%v pruned=%v", ft.killed, fg.pruned)
 	}
 }
 
 func TestDeleteKillsRemovesAndOptionallyDropsBranch(t *testing.T) {
 	fg := &fakeGit{}
 	ft := &fakeTmux{}
-	m, _ := newManager(t, fg, ft)
-	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt", RepoPath: "/r", Branch: "fleet/s"}
+	m, cfg := newManager(t, fg, ft)
+	wt := filepath.Join(cfg.WorktreeBaseDir, "p", "s")
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: wt, RepoPath: "/r", Branch: "fleet/s"}
 
-	if err := m.Delete(s, false); err != nil {
+	if _, err := m.Delete(s, false); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if len(ft.killed) != 1 || ft.killed[0] != "fleet-workspace:fleet-p-s" {
 		t.Fatalf("delete should kill the window target: killed=%v", ft.killed)
 	}
-	if len(fg.removed) != 1 || len(fg.deleted) != 0 {
-		t.Fatalf("expected remove only: removed=%v deleted=%v", fg.removed, fg.deleted)
+	if len(fg.pruned) != 1 || len(fg.deleted) != 0 {
+		t.Fatalf("expected prune only: pruned=%v deleted=%v", fg.pruned, fg.deleted)
 	}
-	if err := m.Delete(s, true); err != nil {
+	if _, err := m.Delete(s, true); err != nil {
 		t.Fatalf("delete+branch: %v", err)
 	}
 	if len(fg.deleted) != 1 || fg.deleted[0] != "fleet/s" {
 		t.Fatalf("expected branch delete, got %v", fg.deleted)
+	}
+}
+
+func TestDeletePartialRemovalStillForgetsSession(t *testing.T) {
+	g := &fakeGit{}
+	m, cfg := newManager(t, g, &fakeTmux{})
+
+	// A worktree whose files cannot all be removed, as when a container has
+	// written root-owned output into it.
+	wt := filepath.Join(cfg.WorktreeBaseDir, "proj", "sess")
+	if err := os.MkdirAll(filepath.Join(wt, ".fleet"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".fleet", "meta.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.removeTree = func(string) (cleanup.Removal, error) {
+		return cleanup.Removal{BlockedCount: 42, Blocked: []string{filepath.Join(wt, "vendor")}}, nil
+	}
+
+	s := Session{Project: "proj", Name: "sess", Branch: "b", RepoPath: "/repo", WorktreePath: wt}
+	res, err := m.Delete(s, true)
+	if err != nil {
+		t.Fatalf("delete must not fail on blocked files: %v", err)
+	}
+	if res.Leftover != wt || res.LeftoverCount != 42 {
+		t.Errorf("expected leftovers reported, got %+v", res)
+	}
+	// The session must be forgotten regardless: meta gone, registry pruned,
+	// branch deleted.
+	if _, err := os.Stat(filepath.Join(wt, ".fleet", "meta.json")); !os.IsNotExist(err) {
+		t.Error("expected meta.json to be removed so the session leaves the dashboard")
+	}
+	if len(g.pruned) != 1 || g.pruned[0] != "/repo" {
+		t.Errorf("expected the repo to be pruned, got %v", g.pruned)
+	}
+	if len(g.deleted) != 1 || g.deleted[0] != "b" {
+		t.Errorf("expected the branch to be deleted, got %v", g.deleted)
+	}
+}
+
+func TestDeleteCleanRemovalReportsNoLeftover(t *testing.T) {
+	g := &fakeGit{}
+	m, cfg := newManager(t, g, &fakeTmux{})
+	wt := filepath.Join(cfg.WorktreeBaseDir, "proj", "sess")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Delete(Session{Project: "proj", Name: "sess", RepoPath: "/repo", WorktreePath: wt}, false)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if res.Leftover != "" {
+		t.Errorf("expected no leftovers, got %+v", res)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Error("expected the worktree directory to be gone")
+	}
+}
+
+func TestDeleteIsIdempotentOnAlreadyGoneWorktree(t *testing.T) {
+	g := &fakeGit{}
+	m, cfg := newManager(t, g, &fakeTmux{})
+	wt := filepath.Join(cfg.WorktreeBaseDir, "proj", "gone")
+
+	if _, err := m.Delete(Session{Project: "proj", Name: "gone", RepoPath: "/repo", WorktreePath: wt}, false); err != nil {
+		t.Fatalf("deleting an already-removed worktree must succeed: %v", err)
+	}
+}
+
+func TestDeleteRefusesPathOutsideWorktreeBase(t *testing.T) {
+	g := &fakeGit{}
+	m, _ := newManager(t, g, &fakeTmux{})
+	outside := t.TempDir()
+
+	if _, err := m.Delete(Session{Project: "p", Name: "s", RepoPath: "/repo", WorktreePath: outside}, false); err == nil {
+		t.Fatal("expected a refusal for a path outside the worktree base dir")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Errorf("the directory must be untouched: %v", err)
 	}
 }
 

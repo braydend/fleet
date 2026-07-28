@@ -25,7 +25,8 @@ type Status struct {
 type Git interface {
 	DefaultBranch(repoPath string) (string, error)
 	AddWorktree(repoPath, worktreePath, branch, base string) error
-	RemoveWorktree(repoPath, worktreePath string, force bool) error
+	PruneWorktrees(repoPath string) error
+	IsWorktree(path string) bool
 	DeleteBranch(repoPath, branch string, force bool) error
 	Status(worktreePath string) (Status, error)
 	Push(worktreePath, branch string) error
@@ -64,13 +65,28 @@ func (c *CLI) AddWorktree(repoPath, worktreePath, branch, base string) error {
 	return err
 }
 
-func (c *CLI) RemoveWorktree(repoPath, worktreePath string, force bool) error {
-	args := []string{"worktree", "remove", worktreePath}
-	if force {
-		args = append(args, "--force")
-	}
-	_, err := c.git(repoPath, args...)
+// PruneWorktrees drops registry entries whose directories are gone. fleet
+// removes worktree trees itself (see internal/cleanup) and then prunes, rather
+// than using `git worktree remove`: that command unlinks the registration
+// before deleting the tree, so a partial delete — e.g. root-owned files written
+// by a container — leaves an orphan that no later command can remove.
+//
+// Prune is repo-wide, so it also drops registrations for other worktrees of
+// this repo whose directories are currently absent. That matches what `git gc`
+// already does routinely.
+func (c *CLI) PruneWorktrees(repoPath string) error {
+	_, err := c.git(repoPath, "worktree", "prune")
 	return err
+}
+
+// IsWorktree reports whether path is still a linked git worktree. A linked
+// worktree is marked by a .git file pointing at the repo's admin directory;
+// once that is gone git no longer recognises the path, which is exactly the
+// state a partially failed removal leaves behind. Deliberately a stat rather
+// than a subprocess: the refresher calls this for every session on every tick.
+func (c *CLI) IsWorktree(path string) bool {
+	_, err := os.Stat(filepath.Join(path, ".git"))
+	return err == nil
 }
 
 func (c *CLI) DeleteBranch(repoPath, branch string, force bool) error {
