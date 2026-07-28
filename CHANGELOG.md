@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/braydend/fleet/compare/v0.5.0...v0.6.0) (2026-07-28)
+
+
+### Features
+
+* **cleanup:** add best-effort worktree tree removal ([4df94ed](https://github.com/braydend/fleet/commit/4df94edc0a851fd41611ccfd29d27ebcad4ae85c))
+* **refresher:** flag worktrees git no longer tracks as broken ([ea442f6](https://github.com/braydend/fleet/commit/ea442f627e2df2f67f76c7824c293d527ec37e77))
+* **ui:** clean up broken sessions and report leftover files ([f642852](https://github.com/braydend/fleet/commit/f6428521955eb4a9690b412dfdd1bc0c3f80c7c0))
+
+
+### Bug Fixes
+
+* never strand a session when its worktree can't be deleted ([bf01e90](https://github.com/braydend/fleet/commit/bf01e9092a5390f75d84ff38ac828b8a2b8657e2))
+* **session:** never strand a session when its worktree can't be deleted ([544c882](https://github.com/braydend/fleet/commit/544c88291d07fa3ef5fcf908b8461deb010e94a1))
+
 ## [0.5.0](https://github.com/braydend/fleet/compare/v0.4.0...v0.5.0) (2026-07-22)
 
 
