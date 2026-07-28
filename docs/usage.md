@@ -141,3 +141,26 @@ The cleanup menu (`d` on the dashboard) offers three actions for a session:
 - **push / open PR** — pushes the branch and, if `gh` is available, opens a PR.
 - **leave** — kills only the tmux session, leaving the worktree and branch for
   you to handle manually.
+
+### Broken sessions
+
+A session shows as 🚫 **broken** when its directory is still there but git no
+longer recognises it as a worktree. The usual cause is a delete that could not
+remove every file — typically root-owned output (`vendor/`, caches) written into
+the worktree by a container running as root.
+
+Pressing `d` on a broken session offers a single **clean up** action, which
+always succeeds in removing the session: the metadata is dropped, the worktree
+registry is reconciled, and the branch is deleted, so it leaves the dashboard for
+good.
+
+Files fleet could not delete are left on disk and reported in the status line,
+for example:
+
+```
+⚠ cleaned up ascension/mago_consolidation — 73359 files left at
+  /home/you/.local/share/fleet/worktrees/ascension/mago_consolidation
+  (sudo rm -rf to reclaim)
+```
+
+fleet never runs `sudo` itself, so reclaiming that space is a manual step.
