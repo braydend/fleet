@@ -195,10 +195,17 @@ green from the first run:
 | `internal/selfupdate/extract.go:19` | unchecked `defer gr.Close()` |
 | `internal/selfupdate/smoke_test.go:41,42` | unchecked `w.Write` |
 
-Each is resolved with an explicit `_ =` discard. No behaviour changes: these are
-writes to a terminal writer, an `httptest` response writer, and deferred closes
-of read-only handles, where a returned error has no recovery path. Being
-explicit documents that the discard is deliberate.
+Eight are resolved with an explicit `_ =` discard and change no behaviour: they
+are writes to a terminal writer, writes to an `httptest` response writer, and
+deferred closes of read-only handles, where a returned error has no recovery
+path. Being explicit documents that the discard is deliberate.
+
+The ninth is not a discard. `internal/git/git.go:132` is a deferred `Close()` on
+a handle opened `O_APPEND|O_CREATE|O_WRONLY`, and on a write handle the close is
+what flushes — so a failure to append the pattern to `info/exclude` was being
+swallowed. That one is fixed properly: write, close explicitly, and return the
+close error when the write succeeded. It is a real (if minor) bug fix that the
+linter surfaced, which is a reasonable advertisement for adding the linter.
 
 `gofmt` and `go vet` are already clean, and `go test -race ./...` plus both
 smoke tests pass locally under `TERM=dumb` with stdin closed — confirming the
