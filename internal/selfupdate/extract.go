@@ -16,7 +16,7 @@ func extractBinary(targz []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 	tr := tar.NewReader(gr)
 	for {
 		hdr, err := tr.Next()

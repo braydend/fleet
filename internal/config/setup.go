@@ -37,8 +37,8 @@ func Save(path string, c Config) error {
 func Setup(path string, in io.Reader, out io.Writer) (Config, error) {
 	cfg := Default()
 
-	fmt.Fprintf(out, "No config found at %s.\n", path)
-	fmt.Fprint(out, "Enter the directory to scan for git projects (scan_root): ")
+	_, _ = fmt.Fprintf(out, "No config found at %s.\n", path)
+	_, _ = fmt.Fprint(out, "Enter the directory to scan for git projects (scan_root): ")
 
 	line, err := bufio.NewReader(in).ReadString('\n')
 	if err != nil && line == "" {
@@ -58,7 +58,7 @@ func Setup(path string, in io.Reader, out io.Writer) (Config, error) {
 	if err := Save(path, cfg); err != nil {
 		return Config{}, err
 	}
-	fmt.Fprintf(out, "Wrote config to %s\n", path)
+	_, _ = fmt.Fprintf(out, "Wrote config to %s\n", path)
 	return cfg, nil
 }
 

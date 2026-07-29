@@ -38,8 +38,8 @@ func TestSmokeRealSwap(t *testing.T) {
 	checksums := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), archiveName)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/archive", func(w http.ResponseWriter, _ *http.Request) { w.Write(tgz) })
-	mux.HandleFunc("/sums", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(checksums)) })
+	mux.HandleFunc("/archive", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(tgz) })
+	mux.HandleFunc("/sums", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(checksums)) })
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
