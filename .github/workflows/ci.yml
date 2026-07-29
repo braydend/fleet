@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
@@ -33,7 +33,7 @@ jobs:
         run: go vet ./...
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12
+          version: v2.12.2
           args: --build-tags=smoke
 
   test:
@@ -60,7 +60,20 @@ jobs:
       - name: Test
         run: go test -race ./...
       - name: Smoke tests
-        run: go test -race -tags smoke -run Smoke ./...
+        run: |
+          set +e
+          output=$(go test -race -v -tags smoke -run Smoke ./... 2>&1)
+          status=$?
+          set -e
+          echo "$output"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::smoke tests failed"
+            exit "$status"
+          fi
+          if ! grep -q -- '--- PASS: TestSmoke' <<<"$output"; then
+            echo "::error::no smoke test actually ran — the selector matched zero tests"
+            exit 1
+          fi
 
   commits:
     if: github.event_name == 'pull_request'
