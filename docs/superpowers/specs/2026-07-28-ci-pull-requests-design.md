@@ -66,9 +66,17 @@ caches written on a PR branch cannot be read by sibling PR branches — only
 default-branch caches are shared. Without the `push` trigger, most PRs would
 start with a cold module and build cache.
 
-`concurrency: ci-${{ github.ref }}` with `cancel-in-progress: true`, mirroring
-the `release-${{ github.ref }}` group already used in `release.yml`. Superseded
-runs are pointless work.
+`concurrency: ci-${{ github.ref }}` with
+`cancel-in-progress: ${{ github.event_name == 'pull_request' }}` — `true` on
+`pull_request`, `false` on `push`. This does not simply mirror
+`release.yml`'s `release-${{ github.ref }}` group: that group hardcodes
+`cancel-in-progress: false` because a `main` run must never be cancelled. `ci`
+needs the identical guarantee for its own `push: main` runs — two merges
+landing close together must not cancel the first run, which would lose both
+the health signal and the cache save that the trigger exists for (see
+Triggers, above) — while still cancelling a superseded PR run as pointless
+work. The conditional expression is what gets both behaviours out of one
+concurrency group.
 
 Top-level `permissions: contents: read`; the `commits` job additionally needs
 `pull-requests: read`.
@@ -95,12 +103,19 @@ is on by default in setup-go v5, so no explicit `actions/cache` step is needed.
    cover formatting, and the tree is currently clean, so this locks in the
    status quo at zero cost.
 2. `go vet ./...`
-3. `golangci/golangci-lint-action@v9` with `version: v2.12` and
+3. `golangci/golangci-lint-action@v9` with `version: v2.12.2` and
    `args: --build-tags=smoke`.
 
 The action major is pinned to v9 (which requires golangci-lint ≥ v2.1) and the
-linter to the `v2.12` minor line, so patch releases are picked up but a minor
-bump — which can introduce new findings — is an explicit commit.
+linter itself to the exact patch release `v2.12.2` — the same string
+`CONTRIBUTING.md`'s local fallback command pins to
+(`go run .../golangci-lint@v2.12.2 run ...`). Pinning only to the `v2.12`
+minor line, as this workflow originally shipped, lets the two drift
+independently: a patch release the action picks up before (or after) a
+contributor's local pin can make "clean locally" and "clean in CI" disagree
+without either side changing anything. Exact-patch pinning in both places
+costs a two-file commit on every bump, patch or minor, in exchange for
+`golangci-lint run` meaning the same thing everywhere it runs.
 
 No `.golangci.yml`. The default linter set (errcheck, govet, ineffassign,
 staticcheck, unused) is the right starting point; a config file that only
@@ -140,7 +155,14 @@ Note that `claude` is **not** needed — neither smoke test shells out to it.
 #### Job `commits`
 
 `actions/checkout@v4` with `fetch-depth: 0`, then
-`wagoid/commitlint-github-action@v6`.
+`wagoid/commitlint-github-action@v6` with `configFile: .commitlintrc.yml`.
+
+The `configFile` input is required, not decorative: the action resolves its
+config solely from the path it names, defaulting to `commitlint.config.mjs`,
+and performs no cosmiconfig search of its own. Omit the input and the in-repo
+`.commitlintrc.yml` is never read at all — the job would still run and would
+still report a `commits` check, but silently enforcing bare
+`@commitlint/config-conventional` defaults instead of this repo's rules.
 
 Gated on `if: github.event_name == 'pull_request'`. Commit messages are
 immutable once merged, so re-validating them on `main` can only produce a
@@ -168,31 +190,45 @@ extends:
   - "@commitlint/config-conventional"
 rules:
   body-max-line-length: [0, always, 100]
+  footer-max-line-length: [0, always, 100]
 ```
 
 (Level `0` disables the rule; the remaining tuple members are inert but keep the
 value a valid three-element rule config — YAML has no `Infinity` literal, which
 is the idiom a JS config would use here.)
 
-The action falls back to `@commitlint/config-conventional` when no config file
-exists, so this file is not strictly required — but it makes the ruleset
-explicit and reviewable in-repo, and it disables `body-max-line-length`. That
-default (100 chars) fails on long URLs pasted into a commit body, which is
-friction with no upside. `type-enum` is left at its default, which already
-covers every type CONTRIBUTING.md names (`feat`, `fix`, `docs`, `chore`,
-`test`, `refactor`, `ci`), as are `header-max-length` (100) and the
-subject-format rules.
+This file only takes effect because the `commits` job passes
+`configFile: .commitlintrc.yml` to `wagoid/commitlint-github-action@v6` (see
+Job `commits`, above). The action reads only the single path named by
+`configFile` — defaulting to `commitlint.config.mjs` — and performs no
+cosmiconfig search of its own. Without that explicit input, an in-repo
+`.commitlintrc.yml` is never discovered, and the bare `config-conventional`
+defaults apply unchanged.
+
+Both rules disable a 100-character line cap `config-conventional` sets by
+default. `body-max-line-length` covers a long URL pasted into a commit body,
+which is friction with no upside. `footer-max-line-length` exists for a less
+obvious reason: conventional-commits-parser, which underlies commitlint,
+treats everything from the first `#NN` issue reference onward as the footer,
+not the body. CONTRIBUTING hard rule #2 requires every commit addressing an
+issue to cite it (`#12`), so a commit that cites an issue and is then
+followed by a long URL fails on `footer-max-line-length` rather than
+`body-max-line-length` — the exact scenario this file exists to prevent, one
+rule over from where the first fix landed. `type-enum` is left at its
+default, which already covers every type CONTRIBUTING.md names (`feat`,
+`fix`, `docs`, `chore`, `test`, `refactor`, `ci`), as are `header-max-length`
+(100) and the subject-format rules.
 
 ## Pre-existing lint findings
 
-`golangci-lint v2.12.2` with `--build-tags=smoke` reports nine issues, all
-`errcheck`, all mechanical. They are fixed as part of this change so CI is
-green from the first run:
+`golangci-lint v2.12.2` with `--build-tags=smoke` reported nine issues at the
+point this document was written, all `errcheck`, all mechanical. They were
+fixed as part of this change so CI was green from the first run:
 
 | File | Issue |
 | --- | --- |
 | `internal/config/setup.go:40,41,61` | unchecked `fmt.Fprintf` / `fmt.Fprint` |
-| `internal/git/git.go:132` | unchecked `defer f.Close()` |
+| `internal/git/git.go:180` | unchecked `defer f.Close()` |
 | `internal/selfupdate/apply.go:90` | unchecked `defer resp.Body.Close()` |
 | `internal/selfupdate/check.go:64` | unchecked `defer resp.Body.Close()` |
 | `internal/selfupdate/extract.go:19` | unchecked `defer gr.Close()` |
@@ -203,17 +239,37 @@ are writes to a terminal writer, writes to an `httptest` response writer, and
 deferred closes of read-only handles, where a returned error has no recovery
 path. Being explicit documents that the discard is deliberate.
 
-The ninth is not a discard. `internal/git/git.go:132` is a deferred `Close()` on
-a handle opened `O_APPEND|O_CREATE|O_WRONLY`, and on a write handle the close is
-what flushes — so a failure to append the pattern to `info/exclude` was being
+The ninth is not a discard. `internal/git/git.go` (the tail of `Ignore`, which
+appends a pattern to the worktree's `info/exclude`) had a deferred `Close()`
+on a handle opened `O_APPEND|O_CREATE|O_WRONLY`, and on a write handle the
+close is what flushes — so a failure to append the pattern was being
 swallowed. That one is fixed properly: write, close explicitly, and return the
 close error when the write succeeded. It is a real (if minor) bug fix that the
 linter surfaced, which is a reasonable advertisement for adding the linter.
 
-`gofmt` and `go vet` are already clean, and `go test -race ./...` plus both
-smoke tests pass locally under `TERM=dumb` with stdin closed — confirming the
-Bubble Tea and Lip Gloss tests do not depend on a TTY and will behave the same
-on a runner.
+A tenth finding was not present among the nine above but surfaced later, once
+this branch was rebased onto current `main`: `staticcheck` `SA4000` in
+`internal/naming/sessionid_test.go`, flagging
+`if NewClaudeSessionID() == NewClaudeSessionID()` as comparing two identical
+expressions. It is not an identical-expression bug — `NewClaudeSessionID`
+draws from the CSPRNG, so the two calls return different values, and the
+comparison is a genuine uniqueness assertion. It was fixed by binding both
+calls to variables (`first`, `second`) before comparing, rather than
+suppressed, in commit `30fc9af`, which satisfies the linter without hiding
+intent behind a `//nolint`. `internal/naming/sessionid_test.go` did not exist
+on this branch until the rebase — it was added on `main`, by a later and
+unrelated commit, after this branch had already started — so no local
+`golangci-lint` run before that point could have reported it. That is simply
+the file's later arrival, not a gap in the local verification described
+below.
+
+`gofmt` and `go vet` were already clean at the point above, and `go test
+-race ./...` plus both smoke tests passed locally under `TERM=dumb` with
+stdin closed — confirming the Bubble Tea and Lip Gloss tests do not depend on
+a TTY and behave the same on a runner. The tree was not lint-clean for the
+branch's entire life, since the SA4000 finding above arrived after this
+section was first written; it was, however, verified clean at every point it
+was checked, with each new finding fixed as it appeared.
 
 ## Documentation changes
 
@@ -242,12 +298,33 @@ A workflow cannot be unit-tested, so verification is layered:
 ## Making the checks required (deferred)
 
 Left unapplied per the decision above. When the checks have proven themselves on
-real PRs, the three contexts to require are `lint`, `test`, and `commits`:
+real PRs, the three contexts to require are `lint`, `test`, and `commits`.
+
+The naive `required_status_checks`-only command does not work as written on
+this repo, for two independent reasons: `contexts[]` is deprecated in favour
+of `checks[]` (an array of `{context, app_id}` objects), and the
+`required_status_checks` sub-resource itself only accepts `PATCH`/`PUT` when
+branch protection already exists on the branch — it 404s otherwise, and `main`
+has no branch protection configured today. Both problems disappear by driving
+the full `protection` resource instead, which creates protection and sets the
+required checks in one call:
 
 ```sh
-gh api -X PUT repos/braydend/fleet/branches/main/protection/required_status_checks \
-  -F strict=false \
-  -f 'contexts[]=lint' -f 'contexts[]=test' -f 'contexts[]=commits'
+gh api -X PUT repos/braydend/fleet/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": false,
+    "checks": [
+      { "context": "lint" },
+      { "context": "test" },
+      { "context": "commits" }
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
 ```
 
 Context names must match the job names exactly; a mismatch leaves `main`
@@ -258,9 +335,10 @@ manifest, so `lint` and `test` pass unchanged.
 
 ## Risks
 
-- **golangci-lint minor bumps introduce findings.** Mitigated by pinning to the
-  `v2.12` line; a bump is then a deliberate commit that carries any fixes with
-  it.
+- **golangci-lint bumps introduce findings.** Mitigated by pinning the exact
+  patch release (`v2.12.2`) in both `ci.yml` and `CONTRIBUTING.md`; any bump —
+  patch or minor — is then a deliberate, two-file commit that carries any
+  fixes with it.
 - **The default linter set is a judgement call.** If errcheck proves noisy in
   practice, the response is a `.golangci.yml` with a justified exclusion, not
   disabling the job.

@@ -37,7 +37,7 @@ until they are present:
   (no config file) it prompts for `scan_root` and writes the config; thereafter
   it loads `~/.config/fleet/config.yaml`.
 
-Every check above runs on each pull request via
+Every check above except `go run .` runs on each pull request via
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which also validates
 commit messages with commitlint. The checks are advisory — they report on the
 PR but do not block merging.

@@ -14,7 +14,7 @@
 
 - **No GitHub issue.** This was a direct request, so CONTRIBUTING hard rule #2 (issue linking) does not apply. Rule #3 does: the spec and this plan ship in the **same PR** as the implementation. The spec is already committed (`972e9c9`).
 - **Conventional Commits, mandatory.** Each task below specifies its exact commit message. None of these commits should trigger a release: use `refactor:`, `ci:`, and `docs:` only — never `feat:` or `fix:`.
-- **Pinned action versions, exactly these:** `actions/checkout@v4`, `actions/setup-go@v5`, `golangci/golangci-lint-action@v9` (with `version: v2.12`), `wagoid/commitlint-github-action@v6`.
+- **Pinned action versions, exactly these:** `actions/checkout@v4`, `actions/setup-go@v5`, `golangci/golangci-lint-action@v9` (with `version: v2.12.2`, matching the exact patch pin `CONTRIBUTING.md`'s local fallback command uses), `wagoid/commitlint-github-action@v6` (with `configFile: .commitlintrc.yml`).
 - **Job names are load-bearing:** `lint`, `test`, `commits`. They are the status-check contexts recorded in the spec for future branch protection. Do not rename them.
 - **Do not modify `.github/workflows/release.yml`** and do not change any repository setting, including branch protection. The checks are advisory by explicit decision.
 - **Runner is `ubuntu-latest` only.** No OS matrix, no Go version matrix — the toolchain comes from `go-version-file: go.mod`.
@@ -33,7 +33,7 @@ Eight are genuine "nothing to do with this error" cases, resolved with an explic
 
 **Files:**
 - Modify: `internal/config/setup.go:40-41`, `internal/config/setup.go:61`
-- Modify: `internal/git/git.go:126-134`
+- Modify: `internal/git/git.go:172-180`
 - Modify: `internal/selfupdate/apply.go:90`
 - Modify: `internal/selfupdate/check.go:64`
 - Modify: `internal/selfupdate/extract.go:19`
@@ -41,7 +41,7 @@ Eight are genuine "nothing to do with this error" cases, resolved with an explic
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: no signature changes. `func (c *CLI) Ignore(worktreePath, pattern string) error` in `internal/git/git.go:108` (the function containing line 132) keeps its signature and existing call sites; it now also reports a `Close` failure that it previously swallowed.
+- Produces: no signature changes. `func (c *CLI) Ignore(worktreePath, pattern string) error` in `internal/git/git.go:152` (the function containing line 180) keeps its signature and existing call sites; it now also reports a `Close` failure that it previously swallowed.
 
 - [ ] **Step 1: Observe the current failures**
 
@@ -51,7 +51,7 @@ Run:
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --build-tags=smoke ./...
 ```
 
-Expected: exit status 1, ending with `9 issues:` and `* errcheck: 9`. The nine lines listed must match the six files above. If the count differs, stop and reconcile with the spec before changing code — new findings mean the tree moved.
+Expected: exit status 1. Against current `main`, ten findings exist: nine `errcheck` findings (the ones this task fixes, matching the six files above) plus one `staticcheck` `SA4000` finding in `internal/naming/sessionid_test.go` — see the spec's "Pre-existing lint findings" section for why that one is separate from this task and how it was fixed. Output ends with `10 issues:`, `* errcheck: 9`, and `* staticcheck: 1`. If the counts or the file list differ from that, stop and reconcile with the spec before changing code — new findings mean the tree moved.
 
 - [ ] **Step 2: Fix the three `fmt.Fprint*` calls in `internal/config/setup.go`**
 
@@ -207,7 +207,7 @@ jobs:
         run: go vet ./...
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12
+          version: v2.12.2
           args: --build-tags=smoke
 
   test:
@@ -338,7 +338,7 @@ rules:
   body-max-line-length: [0, always, 100]
 ```
 
-The action falls back to `@commitlint/config-conventional` when no config file exists, so this file is not strictly required — but it makes the ruleset explicit and reviewable in-repo, and it disables `body-max-line-length`. That default (100 characters) fails on a long URL pasted into a commit body, which is friction with no upside. Level `0` disables the rule; the remaining tuple members are inert but keep it a valid three-element rule config.
+This file only takes effect once Step 4 passes `configFile: .commitlintrc.yml` to `wagoid/commitlint-github-action@v6` — the action resolves its config solely from that input (defaulting to `commitlint.config.mjs`) and performs no cosmiconfig discovery of its own, so without the explicit input this file would be silently ignored and the bare `@commitlint/config-conventional` defaults would apply instead. It disables `body-max-line-length`; that default (100 characters) fails on a long URL pasted into a commit body, which is friction with no upside. Level `0` disables the rule; the remaining tuple members are inert but keep it a valid three-element rule config.
 
 Leave `type-enum` at its default — it already covers every type CONTRIBUTING.md names (`feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `ci`).
 
@@ -378,9 +378,12 @@ Add at the end of the `jobs:` block, after `test`:
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.yml
 ```
 
 - `if: github.event_name == 'pull_request'` — commit messages are immutable once merged, so re-validating on `main` could only ever produce a failure nobody can act on.
+- `configFile: .commitlintrc.yml` is required, not optional: the action resolves its config solely from this input (defaulting to `commitlint.config.mjs`) and performs no cosmiconfig discovery of its own directories or filenames. Omit it and the in-repo `.commitlintrc.yml` is never read — the job still runs and still reports a `commits` check, but silently enforces un-overridden `@commitlint/config-conventional` defaults instead of this repo's rules.
 - `fetch-depth: 0` is harmless belt-and-braces, not a requirement. This
   action never reads local git history: for `pull_request` events it fetches
   commit messages from the GitHub API (`pulls.listCommits`), and for `push`
