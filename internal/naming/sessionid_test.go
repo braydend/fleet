@@ -15,7 +15,9 @@ func TestNewClaudeSessionIDFormat(t *testing.T) {
 }
 
 func TestNewClaudeSessionIDUnique(t *testing.T) {
-	if NewClaudeSessionID() == NewClaudeSessionID() {
+	first := NewClaudeSessionID()
+	second := NewClaudeSessionID()
+	if first == second {
 		t.Fatal("expected distinct IDs on successive calls")
 	}
 }
