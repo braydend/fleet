@@ -281,6 +281,15 @@ tab, and it is always visible on the dashboard.
   model that the driving agent is chosen per session.
 - `docs/usage.md` — document `default_agent` in the config reference and the
   agent field in the new-session flow.
+- **`AGENTS.md` → `CLAUDE.md` symlink** at the repo root, so an opencode session
+  developing fleet picks up the same project instructions Claude Code does.
+  opencode already falls back to `CLAUDE.md` when no `AGENTS.md` exists, so this
+  changes nothing for opencode specifically — it makes the intent explicit and
+  covers every other tool that reads the `AGENTS.md` convention without a
+  Claude-Code fallback. A symlink rather than a copy so the two can never drift;
+  git stores it as a symlink, and fleet already requires a Unix environment
+  (tmux, `git`), so the Windows-checkout caveat does not apply. `CLAUDE.md`'s
+  Maintenance section records that `CLAUDE.md` is the file to edit.
 
 ## Non-goals
 

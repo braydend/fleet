@@ -115,3 +115,7 @@ line, confirmation for destructive actions).
 
 Keep this file and the design spec in sync as decisions change. Update the
 **Status** section as the project moves from design → implementation.
+
+`AGENTS.md` is a symlink to this file, so agents following the `AGENTS.md`
+convention read the same instructions. Always edit `CLAUDE.md`; never replace
+the symlink with a second copy.
