@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,5 +80,58 @@ func TestValidateRequiresScanRoot(t *testing.T) {
 	}
 	if err := (Config{ScanRoot: "/code", WorktreeBaseDir: "/tmp/wt"}).Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDefaultAgentDefaultsToClaude(t *testing.T) {
+	if got := Default().DefaultAgent; got != "claude" {
+		t.Fatalf("Default().DefaultAgent = %q, want \"claude\"", got)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("scan_root: /code\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DefaultAgent != "claude" {
+		t.Fatalf("absent default_agent should default to \"claude\", got %q", cfg.DefaultAgent)
+	}
+}
+
+func TestDefaultAgentOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("scan_root: /code\ndefault_agent: opencode\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DefaultAgent != "opencode" {
+		t.Fatalf("DefaultAgent = %q, want \"opencode\"", cfg.DefaultAgent)
+	}
+}
+
+// A typo must fail loudly at startup rather than silently launching the wrong
+// agent on every new session.
+func TestValidateRejectsUnknownDefaultAgent(t *testing.T) {
+	cfg := Config{ScanRoot: "/code", WorktreeBaseDir: "/wt", DefaultAgent: "opencoder"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for an unknown default_agent")
+	}
+	if !strings.Contains(err.Error(), "opencode") || !strings.Contains(err.Error(), "claude") {
+		t.Fatalf("error should name the valid agents, got %v", err)
+	}
+}
+
+func TestValidateAcceptsEmptyDefaultAgent(t *testing.T) {
+	cfg := Config{ScanRoot: "/code", WorktreeBaseDir: "/wt"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("an empty default_agent means \"the built-in default\", got %v", err)
 	}
 }
