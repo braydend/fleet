@@ -83,3 +83,34 @@ func TestReadLegacyMetaWithoutSessionID(t *testing.T) {
 		t.Fatalf("legacy meta should have empty ClaudeSessionID, got %q", got.ClaudeSessionID)
 	}
 }
+
+func TestWriteReadRoundTripsAgent(t *testing.T) {
+	wt := t.TempDir()
+	if err := Write(wt, Meta{Project: "p", Session: "s", Agent: "opencode"}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := Read(wt)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got.Agent != "opencode" {
+		t.Fatalf("Agent = %q, want %q", got.Agent, "opencode")
+	}
+}
+
+// Sessions created before agents were selectable have no "agent" key. They must
+// read back as empty, which callers resolve to Claude Code.
+func TestReadLegacyMetaHasNoAgent(t *testing.T) {
+	wt := t.TempDir()
+	body := []byte(`{"project":"p","session":"s","branch":"b","base":"main"}`)
+	if err := writeRaw(wt, body); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := Read(wt)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got.Agent != "" {
+		t.Fatalf("legacy Agent = %q, want empty", got.Agent)
+	}
+}

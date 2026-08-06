@@ -19,6 +19,10 @@ type Meta struct {
 	CreatedAt       time.Time `json:"created_at"`
 	CleanupIntent   string    `json:"cleanup_intent,omitempty"`
 	ClaudeSessionID string    `json:"claude_session_id,omitempty"`
+	// Agent is the ID of the coding agent driving this session (see
+	// internal/agent). Absent in sessions created before agents were
+	// selectable; agent.Lookup resolves the empty string to Claude Code.
+	Agent string `json:"agent,omitempty"`
 }
 
 // dir returns the .fleet directory inside a worktree.

@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/forge"
 	"github.com/bray/fleet/internal/git"
@@ -100,7 +101,8 @@ func run() error {
 			return projects.Scan(cfg.ScanRoot, g)
 		},
 		Create: func(p projects.Project, name, branch, base string) error {
-			_, err := mgr.Create(p, name, branch, base)
+			// Task 6 replaces this with the agent chosen in the form.
+			_, err := mgr.Create(p, name, branch, base, agent.Lookup(agent.IDClaude))
 			return err
 		},
 		Branches: func(p projects.Project) (git.Branches, error) {
