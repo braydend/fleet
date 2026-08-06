@@ -7,24 +7,29 @@ import (
 
 func TestClassify(t *testing.T) {
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	claudeMarkers := []string{"❯ 1.", "Do you want", "(y/n)"}
 
 	cases := []struct {
 		name         string
 		lastActivity time.Time
 		paneTail     string
+		markers      []string
 		missing      bool // no window at all
 		dead         bool // window exists but process exited
 		want         State
 	}{
-		{"missing window is exited", time.Time{}, "", true, false, Exited},
-		{"dead window is exited", now, "anything", false, true, Exited},
-		{"recent output is working", now.Add(-1 * time.Second), "Running tests...", false, false, Working},
-		{"quiet with prompt is waiting", now.Add(-30 * time.Second), "Do you want to proceed?\n❯ 1. Yes", false, false, Waiting},
-		{"quiet without prompt is idle", now.Add(-30 * time.Second), "all done. 4 passed", false, false, Idle},
+		{"missing window is exited", time.Time{}, "", claudeMarkers, true, false, Exited},
+		{"dead window is exited", now, "anything", claudeMarkers, false, true, Exited},
+		{"recent output is working", now.Add(-1 * time.Second), "Running tests...", claudeMarkers, false, false, Working},
+		{"quiet with prompt is waiting", now.Add(-30 * time.Second), "Do you want to proceed?\n❯ 1. Yes", claudeMarkers, false, false, Waiting},
+		{"quiet without prompt is idle", now.Add(-30 * time.Second), "all done. 4 passed", claudeMarkers, false, false, Idle},
+		// An agent with no known prompt text can never be reported as waiting,
+		// however suggestive its pane looks.
+		{"no markers is never waiting", now.Add(-30 * time.Second), "Do you want to proceed?", nil, false, false, Idle},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := Classify(c.lastActivity, now, c.paneTail, c.missing, c.dead)
+			got := Classify(c.lastActivity, now, c.paneTail, c.markers, c.missing, c.dead)
 			if got != c.want {
 				t.Fatalf("Classify = %v, want %v", got, c.want)
 			}

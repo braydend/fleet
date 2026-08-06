@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
@@ -76,7 +77,8 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 			if alive {
 				tail, _ = t.CapturePane(target) // best-effort
 			}
-			state := activity.Classify(w.LastActivity, now(), tail, !present, w.Dead)
+			ag := agent.Lookup(md.Agent)
+			state := activity.Classify(w.LastActivity, now(), tail, ag.Markers, !present, w.Dead)
 
 			// A worktree git no longer tracks is broken: its files survive but
 			// it has no .git, so every git query against it would fail. Skip
@@ -106,6 +108,7 @@ func Build(cfg config.Config, t workspaceTmux, g git.Git, now func() time.Time) 
 				WindowIndex:     w.Index,
 				Git:             st,
 				ClaudeSessionID: md.ClaudeSessionID,
+				Agent:           md.Agent,
 			}
 			out = append(out, s)
 
