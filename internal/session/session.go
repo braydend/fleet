@@ -8,7 +8,7 @@ import (
 	"github.com/bray/fleet/internal/git"
 )
 
-// Session is one isolated Claude Code instance: a worktree + tmux session.
+// Session is one isolated coding-agent instance: a worktree + tmux session.
 type Session struct {
 	Project      string
 	Name         string

@@ -1,6 +1,6 @@
 // Package activity classifies a session's live state from cheap tmux signals:
 // the window's last-activity timestamp, whether its process has exited, and a
-// best-effort match of Claude's input prompt in the captured pane tail.
+// best-effort match of the agent's input prompt in the captured pane tail.
 //
 // Callers supply the prompt markers to match, because what a prompt looks like
 // is a property of the agent running in the window (see internal/agent), not of
@@ -18,7 +18,7 @@ type State int
 const (
 	Idle    State = iota // quiet, nothing pending
 	Working              // produced output recently
-	Waiting              // quiet AND a Claude input prompt is showing
+	Waiting              // quiet AND the agent's input prompt is showing
 	Exited               // the process is gone (or no window exists)
 )
 

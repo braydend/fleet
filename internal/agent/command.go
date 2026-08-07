@@ -40,6 +40,17 @@ func opencodeFresh(_, _ string) string { return "opencode" }
 // only be this session's conversation. The fallback keeps the window usable
 // when there is nothing to continue — a first launch, or a session opencode has
 // forgotten.
+//
+// The fallback is position-pinned, not ID-pinned like Claude's resume chain,
+// and that makes it unsafe in a way the Claude chain is not: `--continue`
+// exits non-zero for any reason opencode can't continue — no prior session,
+// but also a crash, a version that doesn't know the flag, or a corrupt
+// session store — and `|| opencode` cannot tell those apart. In every one of
+// those cases it silently starts a brand-new, empty session in this
+// directory. That empty session then becomes "the last session here", so the
+// *next* resume continues the empty one and the real conversation becomes
+// unreachable through fleet, with no error surfaced anywhere: the window just
+// looks fine and the prior context is gone.
 func opencodeResume(_, _ string) string { return "opencode --continue || opencode" }
 
 // shellQuote wraps s in single quotes safe for `sh -c` (tmux runs the window

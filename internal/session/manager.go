@@ -151,7 +151,7 @@ func (m *Manager) EnsureRunning(s Session) error {
 	return nil
 }
 
-// Leave ends the running Claude instance but keeps the worktree and branch.
+// Leave ends the running agent instance but keeps the worktree and branch.
 func (m *Manager) Leave(s Session) error {
 	_ = m.tmux.KillWindow(naming.WindowTarget(s.Project, s.Name)) // ignore: may already be gone
 	return nil

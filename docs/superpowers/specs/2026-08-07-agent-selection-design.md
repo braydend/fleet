@@ -311,3 +311,12 @@ tab, and it is always visible on the dashboard.
   window.
 - opencode, like Claude, is a long-running foreground TUI process, so tmux
   window liveness and last-activity timestamps classify it the same way.
+- The `|| opencode` fallback is a known, accepted risk, not a neutral one:
+  because it is position-pinned rather than ID-pinned, it cannot distinguish
+  "no prior session" from `--continue` failing for any other reason (a crash,
+  a version that doesn't know the flag, a corrupt session store). Any of those
+  causes it to silently start a fresh, empty session in the worktree, which
+  then becomes "the last session here" and shadows the real conversation on
+  every subsequent resume — with nothing surfaced to the user. This is judged
+  acceptable because each fleet worktree is used by one opencode process at a
+  time and the failure modes that trigger it are rare, not because it is safe.
