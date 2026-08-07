@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.7.0](https://github.com/braydend/fleet/compare/v0.6.0...v0.7.0) (2026-08-07)
+
+
+### Features
+
+* **activity:** match prompt markers supplied by the agent ([b225db9](https://github.com/braydend/fleet/commit/b225db9aa674662c4c56dab1908ae90045647dd0))
+* **agent:** add registry of runnable coding agents ([dd357f6](https://github.com/braydend/fleet/commit/dd357f69c343e5992954260f3f4d951314978c5e))
+* choose the coding agent that drives a session (claude | opencode) ([544c8e6](https://github.com/braydend/fleet/commit/544c8e6310862006f31bbaa70e343c570306007c))
+* **config:** add default_agent ([fbf49cf](https://github.com/braydend/fleet/commit/fbf49cf87e4c621b1689d03a4108066405f1ad0f))
+* **session:** launch and resume the session's chosen agent ([14fb980](https://github.com/braydend/fleet/commit/14fb980a6a13cc7a63384972ae03bf10e8731885))
+* **ui:** add the agent field to the new-session form ([1d26d65](https://github.com/braydend/fleet/commit/1d26d6546503378d195e8ec589db3ff80317b316))
+* **ui:** choose the session's agent when creating it ([844bcf9](https://github.com/braydend/fleet/commit/844bcf9b39601dce6461913710e9b3cf2e58f621))
+* **ui:** show each session's agent on the dashboard ([cb45ac1](https://github.com/braydend/fleet/commit/cb45ac1db122480dd505f5dfec77e1223e82cc6e))
+
+
+### Bug Fixes
+
+* require any registered agent on PATH, not just claude ([9941ce3](https://github.com/braydend/fleet/commit/9941ce34ed4048927513e48c31b90654226f6844))
+
 ## [0.6.0](https://github.com/braydend/fleet/compare/v0.5.0...v0.6.0) (2026-07-28)
 
 
