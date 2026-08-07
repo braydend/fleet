@@ -11,7 +11,7 @@ Required on your `PATH` at runtime:
 |------|---------|
 | `git` | worktree and branch operations, status queries |
 | `tmux` | runs each Claude Code instance in its own session |
-| `claude` | the [Claude Code](https://claude.com/claude-code) CLI that each session launches |
+| `claude` and/or `opencode` | at least one is required — the coding-agent CLI each session launches: [Claude Code](https://claude.com/claude-code) or [opencode](https://opencode.ai) |
 
 Optional:
 
@@ -21,8 +21,9 @@ Optional:
 
 To build from source you also need **Go 1.22+**.
 
-`fleet` checks for `git`, `tmux`, and `claude` at startup and exits with a clear
-message if any are missing.
+`fleet` checks for `git`, `tmux`, and at least one supported agent at startup
+and exits with a clear message if either of the first two is missing or no
+supported agent is found.
 
 ## Install
 
