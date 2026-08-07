@@ -55,7 +55,7 @@ func cleanupOptions(s session.Session) []cleanupOption {
 type Actions struct {
 	Refresh       func() ([]session.Session, error)
 	Projects      func() ([]projects.Project, error)
-	Create        func(p projects.Project, name, branch, base string) error
+	Create        func(p projects.Project, name, branch, base, agentID string) error
 	Branches      func(p projects.Project) (git.Branches, error)
 	FetchBranches func(p projects.Project) (git.Branches, error)
 	Delete        func(s session.Session, deleteBranch bool) (session.DeleteResult, error)
@@ -92,11 +92,15 @@ type Model struct {
 	updateAvailable bool
 	updateRelease   selfupdate.Release
 	updateLatest    string
+
+	// defaultAgent is the configured agent ID each new form starts on.
+	defaultAgent string
 }
 
 // New builds a Model. actions may be the zero value in tests; version is the
-// build version string shown in the dashboard footer ("" hides it).
-func New(actions *Actions, version string) Model {
+// build version string shown in the dashboard footer ("" hides it); defaultAgent
+// is the configured agent ID each new-session form starts on.
+func New(actions *Actions, version, defaultAgent string) Model {
 	var a Actions
 	if actions != nil {
 		a = *actions
@@ -104,7 +108,8 @@ func New(actions *Actions, version string) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
 	sp.Style = spinnerStyle
-	return Model{actions: a, state: stateDashboard, spinner: sp, version: version}
+	return Model{actions: a, state: stateDashboard, spinner: sp, version: version,
+		defaultAgent: defaultAgent}
 }
 
 // Init kicks off the first refresh, the tick loop, and the update check.
@@ -263,7 +268,7 @@ func (m Model) keyProjectPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		p := m.projects[m.cursor]
-		m.form = newForm(p)
+		m.form = newForm(p, m.defaultAgent)
 		m.state = stateNewSession
 		m.cursor = 0
 		return m, tea.Batch(
@@ -283,7 +288,18 @@ func (m Model) keyNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.form.field = (m.form.field + 1) % fieldCount
 	case "shift+tab", "up":
 		m.form.field = (m.form.field + fieldCount - 1) % fieldCount
+	case "left":
+		if m.form.field == fieldAgent {
+			m.form.cycleAgent(-1)
+		}
+	case "right":
+		if m.form.field == fieldAgent {
+			m.form.cycleAgent(1)
+		}
 	case "backspace":
+		if m.form.field == fieldAgent {
+			return m, nil // an enum, not a text field
+		}
 		p := m.form.active()
 		if len(*p) > 0 {
 			*p = (*p)[:len(*p)-1]
@@ -294,8 +310,17 @@ func (m Model) keyNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.form.syncBranchDefault()
 	case "enter":
 		m.form.syncBranchDefault()
-		if m.form.field < fieldBase {
+		if m.form.field < fieldAgent {
 			m.form.field++
+			return m, nil
+		}
+		// Refuse rather than create a worktree and branch for a window whose
+		// command would immediately fail. The message lives on the form: the
+		// dashboard status line is not rendered while the form is up.
+		if !m.form.agentAvailable() {
+			m.form.submitError = fmt.Sprintf(
+				"⚠ %s is not on PATH — install it or pick another agent",
+				m.form.selectedAgent().Label)
 			return m, nil
 		}
 		// Close the form and return to the dashboard; the create runs in the
@@ -303,6 +328,9 @@ func (m Model) keyNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = stateDashboard
 		return m, m.submitForm()
 	default:
+		if m.form.field == fieldAgent {
+			return m, nil // an enum, not a text field
+		}
 		if len(msg.Runes) > 0 {
 			p := m.form.active()
 			*p += string(msg.Runes)
@@ -456,11 +484,12 @@ func (m Model) runThenRefresh(fn func() (string, error)) tea.Cmd {
 // submitForm invokes Create and triggers a refresh.
 func (m Model) submitForm() tea.Cmd {
 	f := m.form
+	agentID := f.selectedAgent().ID
 	create := m.actions.Create
 	refreshFn := m.actions.Refresh
 	return func() tea.Msg {
 		if create != nil {
-			if err := create(f.project, f.sessionName, f.branch, f.base); err != nil {
+			if err := create(f.project, f.sessionName, f.branch, f.base, agentID); err != nil {
 				return errorMsg{err: err}
 			}
 		}

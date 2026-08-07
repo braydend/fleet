@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/cleanup"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
@@ -111,7 +112,7 @@ func TestCreateAddsWorktreeMetaAndTmux(t *testing.T) {
 	m, cfg := newManager(t, fg, ft)
 
 	proj := projects.Project{Name: "My App", Path: "/code/my-app", DefaultBranch: "main"}
-	s, err := m.Create(proj, "fix-bug", "fleet/fix-bug", "main")
+	s, err := m.Create(proj, "fix-bug", "fleet/fix-bug", "main", agent.Lookup(agent.IDClaude))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -351,7 +352,7 @@ func TestCreateUsesExistingLocalBranch(t *testing.T) {
 	fg := &fakeGit{localExists: map[string]bool{"feature": true}}
 	m, _ := newManager(t, fg, &fakeTmux{})
 	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
-	if _, err := m.Create(proj, "sess", "feature", "main"); err != nil {
+	if _, err := m.Create(proj, "sess", "feature", "main", agent.Lookup(agent.IDClaude)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if len(fg.addedExisting) != 1 {
@@ -366,7 +367,7 @@ func TestCreateTracksRemoteBranch(t *testing.T) {
 	fg := &fakeGit{remoteExists: map[string]bool{"feature": true}}
 	m, _ := newManager(t, fg, &fakeTmux{})
 	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
-	if _, err := m.Create(proj, "sess", "feature", "main"); err != nil {
+	if _, err := m.Create(proj, "sess", "feature", "main", agent.Lookup(agent.IDClaude)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if len(fg.addedTracking) != 1 {
@@ -381,7 +382,7 @@ func TestCreateNewBranchWhenNeitherExists(t *testing.T) {
 	fg := &fakeGit{}
 	m, _ := newManager(t, fg, &fakeTmux{})
 	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
-	if _, err := m.Create(proj, "sess", "brand-new", "main"); err != nil {
+	if _, err := m.Create(proj, "sess", "brand-new", "main", agent.Lookup(agent.IDClaude)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if len(fg.added) != 1 {
@@ -399,8 +400,86 @@ func TestCreateExistingBranchCheckedOutElsewhere(t *testing.T) {
 	}
 	m, _ := newManager(t, fg, &fakeTmux{})
 	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
-	_, err := m.Create(proj, "sess", "feature", "main")
+	_, err := m.Create(proj, "sess", "feature", "main", agent.Lookup(agent.IDClaude))
 	if err == nil || !strings.Contains(err.Error(), "already checked out in another worktree") {
 		t.Fatalf("expected friendly checked-out error, got %v", err)
+	}
+}
+
+func TestCreateWithClaudeStoresAgentID(t *testing.T) {
+	fg := &fakeGit{}
+	ft := &fakeTmux{}
+	m, _ := newManager(t, fg, ft)
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+
+	s, err := m.Create(proj, "sess", "b", "main", agent.Lookup(agent.IDClaude))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	md, err := meta.Read(s.WorktreePath)
+	if err != nil {
+		t.Fatalf("meta read: %v", err)
+	}
+	if md.Agent != agent.IDClaude || s.Agent != agent.IDClaude {
+		t.Fatalf("agent = meta %q session %q, want %q", md.Agent, s.Agent, agent.IDClaude)
+	}
+	if md.ClaudeSessionID != "test-session-id" {
+		t.Fatalf("claude sessions must store a minted ID, got %q", md.ClaudeSessionID)
+	}
+}
+
+// opencode mints its own session IDs, so fleet stores none and launches it bare.
+func TestCreateWithOpencodeStoresNoSessionID(t *testing.T) {
+	fg := &fakeGit{}
+	ft := &fakeTmux{}
+	m, _ := newManager(t, fg, ft)
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+
+	s, err := m.Create(proj, "sess", "b", "main", agent.Lookup(agent.IDOpencode))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	md, err := meta.Read(s.WorktreePath)
+	if err != nil {
+		t.Fatalf("meta read: %v", err)
+	}
+	if md.Agent != agent.IDOpencode || s.Agent != agent.IDOpencode {
+		t.Fatalf("agent = meta %q session %q, want %q", md.Agent, s.Agent, agent.IDOpencode)
+	}
+	if md.ClaudeSessionID != "" || s.ClaudeSessionID != "" {
+		t.Fatalf("opencode must store no session ID, got meta %q session %q",
+			md.ClaudeSessionID, s.ClaudeSessionID)
+	}
+	if len(ft.createdCmds) != 1 || ft.createdCmds[0] != "opencode" {
+		t.Fatalf("create launch cmd = %v, want [opencode]", ft.createdCmds)
+	}
+}
+
+func TestEnsureRunningUsesOpencodeResumeChain(t *testing.T) {
+	ft := &fakeTmux{windows: map[string]tmux.Window{"fleet-p-s": {Index: 1, Name: "fleet-p-s", Dead: true}}}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt", Agent: agent.IDOpencode}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	want := "opencode --continue || opencode"
+	if len(ft.respawnedCmds) != 1 || ft.respawnedCmds[0] != want {
+		t.Fatalf("respawn cmd = %v, want %q", ft.respawnedCmds, want)
+	}
+}
+
+// A meta naming an agent this build does not know must still produce a usable
+// window rather than an empty command.
+func TestEnsureRunningUnknownAgentFallsBackToClaude(t *testing.T) {
+	ft := &fakeTmux{}
+	m, _ := newManager(t, &fakeGit{}, ft)
+	s := Session{Project: "p", Name: "s", TmuxName: "fleet-p-s", WorktreePath: "/wt",
+		Agent: "from-the-future", ClaudeSessionID: "sid-1"}
+	if err := m.EnsureRunning(s); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	want := "claude --resume sid-1 || claude --session-id sid-1 -n 'p/s' || claude"
+	if len(ft.createdCmds) != 1 || ft.createdCmds[0] != want {
+		t.Fatalf("cmd = %v, want %q", ft.createdCmds, want)
 	}
 }

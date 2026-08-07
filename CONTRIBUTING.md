@@ -20,7 +20,8 @@ until they are present:
     `brew install tmux`. Without it the unit tests still pass (integration tests
     skip when the binary is absent) but the app cannot create sessions.
   - `gh` — GitHub CLI, used for PR creation (`brew install gh`).
-  - `claude` — the Claude Code CLI that each session runs.
+  - `claude` and/or `opencode` — at least one is required; it's the
+    coding-agent CLI each session runs.
 
 ## Build & run
 
@@ -33,9 +34,10 @@ until they are present:
 - Format: `gofmt -l .` — must print nothing.
 - Lint: `golangci-lint run --build-tags=smoke ./...`, or without installing it:
   `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --build-tags=smoke ./...`
-- Run: `go run .` — requires `git`, `tmux`, and `claude` on PATH. On first run
-  (no config file) it prompts for `scan_root` and writes the config; thereafter
-  it loads `~/.config/fleet/config.yaml`.
+- Run: `go run .` — requires `git`, `tmux`, and at least one supported agent
+  (`claude` and/or `opencode`) on PATH. On first run (no config file) it
+  prompts for `scan_root` and writes the config; thereafter it loads
+  `~/.config/fleet/config.yaml`.
 
 Every check above except `go run .` runs on each pull request via
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which also validates

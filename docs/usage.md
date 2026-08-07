@@ -11,7 +11,7 @@ Required on your `PATH` at runtime:
 |------|---------|
 | `git` | worktree and branch operations, status queries |
 | `tmux` | runs each Claude Code instance in its own session |
-| `claude` | the [Claude Code](https://claude.com/claude-code) CLI that each session launches |
+| `claude` and/or `opencode` | at least one is required — the coding-agent CLI each session launches: [Claude Code](https://claude.com/claude-code) or [opencode](https://opencode.ai) |
 
 Optional:
 
@@ -21,8 +21,9 @@ Optional:
 
 To build from source you also need **Go 1.22+**.
 
-`fleet` checks for `git`, `tmux`, and `claude` at startup and exits with a clear
-message if any are missing.
+`fleet` checks for `git`, `tmux`, and at least one supported agent at startup
+and exits with a clear message if either of the first two is missing or no
+supported agent is found.
 
 ## Install
 
@@ -78,11 +79,17 @@ scan_root: /home/you/code
 
 # Where session worktrees are created: <worktree_base_dir>/<project>/<session>.
 worktree_base_dir: /home/you/.local/share/fleet/worktrees
+
+# Which coding agent new sessions start on: claude (default) or opencode.
+default_agent: claude
 ```
 
 - `scan_root` is **required** (the first-run prompt collects it; it must be an
   existing directory).
 - `worktree_base_dir` defaults to `~/.local/share/fleet/worktrees` if omitted.
+- `default_agent` seeds the new-session form's agent field — `claude` (the
+  default) or `opencode`. The agent is chosen per session, so this only decides
+  which one the form starts on. An unrecognised value is a startup error.
 
 ## Self-update
 
@@ -128,8 +135,14 @@ in and the key to detach and return to the dashboard (`<prefix> d`, e.g.
 **Project picker / cleanup menu**: `↑`/`↓` to move, `Enter` to choose, `Esc` to cancel.
 
 **New-session form**: `Tab`/`Shift-Tab` (or `↑`/`↓`) to move between fields, type
-to edit, `Enter` to advance / submit on the last field, `Esc` to cancel. The
-branch defaults to `fleet/<session>` and the base to the project's default branch.
+to edit, `←`/`→` to change the agent, `Enter` to advance / submit on the last
+field, `Esc` to cancel. The branch defaults to the sanitized session name and the
+base to the project's default branch.
+
+The **agent** field chooses what drives the session: `claude` (Claude Code) or
+`opencode`. An agent whose binary is not on your `PATH` shows as
+`(not installed)` and cannot be submitted. The choice is fixed for the life of
+the session — to switch, delete the session and create a new one.
 
 ## Cleanup menu
 

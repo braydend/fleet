@@ -3,9 +3,12 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/bray/fleet/internal/agent"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,6 +22,9 @@ type Config struct {
 	// the default server, and vice versa. Set it to "" to use the default tmux
 	// server instead (the pre-isolation behaviour).
 	TmuxSocket string `yaml:"tmux_socket"`
+	// DefaultAgent is the agent ID the new-session form starts on. Empty means
+	// the first registered agent.
+	DefaultAgent string `yaml:"default_agent"`
 }
 
 // DefaultPath returns the conventional config file location.
@@ -33,6 +39,7 @@ func Default() Config {
 	return Config{
 		WorktreeBaseDir: filepath.Join(home, ".local", "share", "fleet", "worktrees"),
 		TmuxSocket:      "fleet",
+		DefaultAgent:    agent.IDClaude,
 	}
 }
 
@@ -60,6 +67,10 @@ func (c Config) Validate() error {
 	}
 	if c.WorktreeBaseDir == "" {
 		return errors.New("worktree_base_dir is required")
+	}
+	if c.DefaultAgent != "" && !agent.Known(c.DefaultAgent) {
+		return fmt.Errorf("default_agent %q is not a known agent: valid values are %s",
+			c.DefaultAgent, strings.Join(agent.IDs(), ", "))
 	}
 	return nil
 }

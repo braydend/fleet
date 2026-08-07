@@ -1,11 +1,14 @@
 package refresher
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/meta"
@@ -127,6 +130,47 @@ func TestBuildDerivesSessionsAndActivity(t *testing.T) {
 	target := naming.WindowTarget("My App", "alive")
 	if ft.labels[target] == "" {
 		t.Fatalf("expected a label set for %q, got %v", target, ft.labels)
+	}
+}
+
+// A session's agent comes from its meta and reaches the dashboard, and an
+// agent with no known prompt markers is never reported as waiting even when its
+// pane contains another agent's prompt text.
+func TestBuildCarriesAgentAndSkipsWaitingWithoutMarkers(t *testing.T) {
+	base := t.TempDir()
+	cfg := config.Config{ScanRoot: "/code", WorktreeBaseDir: base}
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+
+	wt := filepath.Join(base, "proj", "sess")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := meta.Write(wt, meta.Meta{
+		Project: "proj", Session: "sess", Branch: "b", Base: "main",
+		Agent: agent.IDOpencode,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	wname := naming.TmuxName("proj", "sess")
+	target := naming.WindowTarget("proj", "sess")
+	ft := &fakeTmux{
+		windows: []tmux.Window{{Index: 1, Name: wname, LastActivity: now.Add(-30 * time.Second)}},
+		tails:   map[string]string{target: "Do you want to proceed?\n❯ 1. Yes"},
+	}
+
+	got, err := Build(cfg, ft, fakeGit{}, func() time.Time { return now })
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(got))
+	}
+	if got[0].Agent != agent.IDOpencode {
+		t.Fatalf("Agent = %q, want %q", got[0].Agent, agent.IDOpencode)
+	}
+	if got[0].Activity != activity.Idle {
+		t.Fatalf("Activity = %v, want Idle — opencode has no prompt markers", got[0].Activity)
 	}
 }
 

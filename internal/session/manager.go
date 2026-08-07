@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/cleanup"
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/forge"
@@ -60,8 +61,8 @@ func NewManager(cfg config.Config, t tmuxPort, g git.Git, f forge.PRer, clock fu
 }
 
 // Create makes the worktree, writes meta, and launches the session's window in
-// the shared workspace.
-func (m *Manager) Create(p projects.Project, name, branch, base string) (Session, error) {
+// the shared workspace under the chosen agent.
+func (m *Manager) Create(p projects.Project, name, branch, base string, ag agent.Agent) (Session, error) {
 	wt := naming.WorktreePath(m.cfg.WorktreeBaseDir, p.Name, name)
 	if err := m.addWorktreeForBranch(p.Path, wt, branch, base); err != nil {
 		return Session{}, err
@@ -72,16 +73,22 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		return Session{}, err
 	}
 	now := m.clock()
-	sessionID := m.newID()
+	// Only agents whose session identity fleet owns get a minted ID; the rest
+	// mint their own and are resumed by other means.
+	sessionID := ""
+	if ag.NeedsID {
+		sessionID = m.newID()
+	}
 	md := meta.Meta{
 		Project: p.Name, Session: name, Branch: branch, Base: base,
 		RepoPath: p.Path, CreatedAt: now, ClaudeSessionID: sessionID,
+		Agent: ag.ID,
 	}
 	if err := meta.Write(wt, md); err != nil {
 		return Session{}, err
 	}
 	wname := naming.TmuxName(p.Name, name)
-	idx, err := m.tmux.CreateWindow(wname, wt, launchFresh(sessionID, p.Name+"/"+name))
+	idx, err := m.tmux.CreateWindow(wname, wt, ag.Fresh(sessionID, p.Name+"/"+name))
 	if err != nil {
 		return Session{}, err
 	}
@@ -89,7 +96,7 @@ func (m *Manager) Create(p projects.Project, name, branch, base string) (Session
 		Project: p.Name, Name: name, Branch: branch, Base: base,
 		RepoPath: p.Path, WorktreePath: wt, TmuxName: wname,
 		CreatedAt: now, Alive: true, WindowIndex: idx,
-		ClaudeSessionID: sessionID,
+		ClaudeSessionID: sessionID, Agent: ag.ID,
 	}, nil
 }
 
@@ -131,7 +138,8 @@ func isAlreadyCheckedOut(err error) bool {
 // missing (e.g. a pre-upgrade session) or respawning it if its process exited.
 // Safe to call right before attaching.
 func (m *Manager) EnsureRunning(s Session) error {
-	cmd := launchResume(s.ClaudeSessionID, s.Project+"/"+s.Name)
+	ag := agent.Lookup(s.Agent)
+	cmd := ag.Resume(s.ClaudeSessionID, s.Project+"/"+s.Name)
 	w, ok := m.tmux.LookupWindow(s.TmuxName)
 	if !ok {
 		_, err := m.tmux.CreateWindow(s.TmuxName, s.WorktreePath, cmd)
@@ -143,7 +151,7 @@ func (m *Manager) EnsureRunning(s Session) error {
 	return nil
 }
 
-// Leave ends the running Claude instance but keeps the worktree and branch.
+// Leave ends the running agent instance but keeps the worktree and branch.
 func (m *Manager) Leave(s Session) error {
 	_ = m.tmux.KillWindow(naming.WindowTarget(s.Project, s.Name)) // ignore: may already be gone
 	return nil

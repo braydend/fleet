@@ -1,9 +1,10 @@
 // Package activity classifies a session's live state from cheap tmux signals:
 // the window's last-activity timestamp, whether its process has exited, and a
-// best-effort match of Claude's input prompt in the captured pane tail.
+// best-effort match of the agent's input prompt in the captured pane tail.
 //
-// This package is the ONLY place that knows what Claude's prompt looks like, so
-// it is the single spot to update if Claude's TUI changes.
+// Callers supply the prompt markers to match, because what a prompt looks like
+// is a property of the agent running in the window (see internal/agent), not of
+// this package.
 package activity
 
 import (
@@ -17,7 +18,7 @@ type State int
 const (
 	Idle    State = iota // quiet, nothing pending
 	Working              // produced output recently
-	Waiting              // quiet AND a Claude input prompt is showing
+	Waiting              // quiet AND the agent's input prompt is showing
 	Exited               // the process is gone (or no window exists)
 )
 
@@ -25,24 +26,18 @@ const (
 // "working": output seen within this window is treated as in-progress.
 const workingWindow = 5 * time.Second
 
-// promptMarkers are substrings that indicate Claude is waiting for input.
-// Best-effort and intentionally centralized; update here if the TUI changes.
-var promptMarkers = []string{
-	"❯ 1.",        // numbered choice prompt
-	"Do you want", // confirmation prompt
-	"(y/n)",       // yes/no prompt
-}
-
-// Classify decides a session's state. missing means no window exists for it;
-// dead means the window exists but its process has exited.
-func Classify(lastActivity, now time.Time, paneTail string, missing, dead bool) State {
+// Classify decides a session's state. markers are the pane-tail substrings that
+// mean the agent is waiting for input; an empty list means the agent's prompt is
+// unknown, so it is never reported as waiting. missing means no window exists
+// for it; dead means the window exists but its process has exited.
+func Classify(lastActivity, now time.Time, paneTail string, markers []string, missing, dead bool) State {
 	if missing || dead {
 		return Exited
 	}
 	if now.Sub(lastActivity) <= workingWindow {
 		return Working
 	}
-	for _, mark := range promptMarkers {
+	for _, mark := range markers {
 		if strings.Contains(paneTail, mark) {
 			return Waiting
 		}

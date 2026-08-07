@@ -52,7 +52,10 @@ In short: `go build ./...`, `go test ./...`, `go run .` (needs `git`, `tmux`,
   where the test suite's `kill-session fleet-workspace` on the shared default
   server was destroying live sessions). On that server, all instances share one
   session (`fleet-workspace`); each instance is a *window* named
-  `fleet-<project>-<session>` running `claude` in its worktree. Windows act as
+  `fleet-<project>-<session>` running `claude` in its worktree.
+  Which agent a window runs — Claude Code or opencode — is chosen per session in
+  the new-session form and recorded in `.fleet/meta.json`; sessions created
+  before that existed have no recorded agent and run Claude Code. Windows act as
   tabs — switch with Alt-1..9 / Alt-←/→ while attached. Per-session activity
   (working / waiting / idle / exited) is derived from tmux's window-activity
   timestamp plus a best-effort capture-pane prompt match (`internal/activity`).
@@ -74,6 +77,8 @@ In short: `go build ./...`, `go test ./...`, `go run .` (needs `git`, `tmux`,
 Each package does one thing, testable in isolation. Adapters (`tmux`, `git`)
 sit behind interfaces so domain logic can be unit-tested with fakes.
 
+- `agent` — the registry of coding agents fleet can run (Claude Code,
+  opencode): launch/resume commands, binary name, prompt markers.
 - `config` — load/validate `~/.config/fleet/config.yaml`.
 - `cleanup` — best-effort recursive removal of a worktree directory, reporting
   what it could not delete.
@@ -115,3 +120,7 @@ line, confirmation for destructive actions).
 
 Keep this file and the design spec in sync as decisions change. Update the
 **Status** section as the project moves from design → implementation.
+
+`AGENTS.md` is a symlink to this file, so agents following the `AGENTS.md`
+convention read the same instructions. Always edit `CLAUDE.md`; never replace
+the symlink with a second copy.

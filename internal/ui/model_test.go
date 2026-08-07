@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/selfupdate"
@@ -35,7 +36,7 @@ func sample() []session.Session {
 }
 
 func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 
@@ -47,7 +48,7 @@ func TestDashboardShowsGroupingTabNumbersAndLegend(t *testing.T) {
 }
 
 func TestDashboardWrapsProjectsInBorders(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 
@@ -74,7 +75,7 @@ func TestDashboardWrapsProjectsInBorders(t *testing.T) {
 }
 
 func TestSessionsUpdatedPopulatesList(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	mm := updated.(Model)
 	if len(mm.sessions) != 2 {
@@ -90,7 +91,7 @@ func TestSessionsUpdatedPopulatesList(t *testing.T) {
 }
 
 func TestQuitKey(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd == nil {
 		t.Fatal("expected quit command")
@@ -98,7 +99,7 @@ func TestQuitKey(t *testing.T) {
 }
 
 func TestErrorMsgSetsStatus(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(errorMsg{err: errSample})
 	if got := updated.(Model).status; got == "" {
 		t.Fatal("expected status to be set on error")
@@ -111,7 +112,7 @@ func TestNKeyOpensProjectPicker(t *testing.T) {
 		called = true
 		return []projects.Project{{Name: "app", Path: "/code/app", DefaultBranch: "main"}}, nil
 	}}
-	m := New(&a, "")
+	m := New(&a, "", "")
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	// The command loads projects; run it and feed the result back.
 	if cmd == nil {
@@ -129,12 +130,12 @@ func TestNKeyOpensProjectPicker(t *testing.T) {
 }
 
 func TestFormSubmitCallsCreate(t *testing.T) {
-	var gotName, gotBranch, gotBase string
-	a := Actions{Create: func(p projects.Project, name, branch, base string) error {
-		gotName, gotBranch, gotBase = name, branch, base
+	var gotName, gotBranch, gotBase, gotAgent string
+	a := Actions{Create: func(p projects.Project, name, branch, base, agentID string) error {
+		gotName, gotBranch, gotBase, gotAgent = name, branch, base, agentID
 		return nil
 	}}
-	m := New(&a, "")
+	m := New(&a, "", "")
 	m.state = stateNewSession
 	m.form = newSessionForm{
 		project:       projects.Project{Name: "app", Path: "/code/app", DefaultBranch: "main"},
@@ -142,7 +143,8 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 		branch:        "fleet/fix",
 		branchTouched: true, // user typed an explicit branch
 		base:          "main",
-		field:         fieldBase, // last field; enter submits
+		field:         fieldAgent, // last field; enter submits
+		agentIndex:    1,          // opencode
 	}
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -152,10 +154,64 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 	if gotName != "fix" || gotBranch != "fleet/fix" || gotBase != "main" {
 		t.Fatalf("create got name=%q branch=%q base=%q", gotName, gotBranch, gotBase)
 	}
+	if gotAgent != agent.IDOpencode {
+		t.Fatalf("create got agent=%q, want %q", gotAgent, agent.IDOpencode)
+	}
+}
+
+func TestArrowKeysCycleAgentOnAgentField(t *testing.T) {
+	m := New(nil, "", "")
+	m.state = stateNewSession
+	m.form = newSessionForm{field: fieldAgent}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if got := updated.(Model).form.agentIndex; got != 1 {
+		t.Fatalf("after right agentIndex = %d, want 1", got)
+	}
+	updated, _ = updated.(Model).Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if got := updated.(Model).form.agentIndex; got != 0 {
+		t.Fatalf("after left agentIndex = %d, want 0", got)
+	}
+}
+
+// Creating a session with an agent that is not installed would leave a real
+// worktree and branch behind for a window that immediately dies.
+func TestSubmitBlockedWhenAgentNotInstalled(t *testing.T) {
+	created := 0
+	a := Actions{Create: func(projects.Project, string, string, string, string) error {
+		created++
+		return nil
+	}}
+	m := New(&a, "", "")
+	m.state = stateNewSession
+	m.form = newSessionForm{
+		project:     projects.Project{Name: "app", DefaultBranch: "main"},
+		sessionName: "fix",
+		branch:      "fix",
+		base:        "main",
+		field:       fieldAgent,
+		agentIndex:  1,
+		available:   []bool{true, false}, // opencode missing
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm := updated.(Model)
+	if cmd != nil {
+		_ = cmd()
+	}
+	if created != 0 {
+		t.Fatalf("Create was called %d times, want 0", created)
+	}
+	if mm.state != stateNewSession {
+		t.Fatalf("state = %v, want the form to stay open", mm.state)
+	}
+	if !strings.Contains(mm.form.submitError, "not on PATH") {
+		t.Fatalf("submitError = %q, want a PATH message", mm.form.submitError)
+	}
 }
 
 func TestBranchDefaultsToSessionName(t *testing.T) {
-	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	f.sessionName = "fix bug"
 	f.syncBranchDefault()
 	if f.branch != "fix_bug" {
@@ -166,9 +222,9 @@ func TestBranchDefaultsToSessionName(t *testing.T) {
 // Regression: typing the session name one rune at a time must keep the branch
 // tracking the *whole* name, not just the first character.
 func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	for _, r := range "fix" {
 		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = next.(Model)
@@ -184,9 +240,9 @@ func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
 // Once the user edits the branch field directly, it must stop auto-tracking the
 // session name.
 func TestEditedBranchStopsTrackingSessionName(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	m.form.field = fieldBranch
 	for _, r := range "custom" {
 		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -207,7 +263,7 @@ func TestEnterAttachesSelectedSession(t *testing.T) {
 		attached = s
 		return func() tea.Msg { return nil }
 	}}
-	m := New(&a, "")
+	m := New(&a, "", "")
 	m.sessions = sample()
 	m.cursor = 0
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -220,7 +276,7 @@ func TestEnterAttachesSelectedSession(t *testing.T) {
 }
 
 func TestDOpensCleanupMenu(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.sessions = sample()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	if updated.(Model).state != stateCleanupMenu {
@@ -234,7 +290,7 @@ func TestCleanupLeaveCallsLeave(t *testing.T) {
 		Leave:   func(session.Session) error { left = true; return nil },
 		Refresh: func() ([]session.Session, error) { return nil, nil },
 	}
-	m := New(&a, "")
+	m := New(&a, "", "")
 	m.sessions = sample()
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -250,7 +306,7 @@ func TestCleanupLeaveCallsLeave(t *testing.T) {
 }
 
 func TestDeleteDirtyRequiresConfirm(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.sessions = sample() // session "a" is dirty
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -264,7 +320,7 @@ func TestDeleteDirtyRequiresConfirm(t *testing.T) {
 func TestDashboardRendersBrokenSession(t *testing.T) {
 	ss := sample()
 	ss[0].Broken = true
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: ss})
 	out := updated.(Model).View()
 
@@ -282,7 +338,7 @@ func TestDashboardRendersBrokenSession(t *testing.T) {
 func TestBrokenSessionCleanupMenuOffersOnlyCleanup(t *testing.T) {
 	ss := sample()
 	ss[0].Broken = true
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: ss})
 	withMenu, _ := updated.(Model).Update(keyMsg("d"))
 	out := withMenu.(Model).View()
@@ -298,7 +354,7 @@ func TestBrokenSessionCleanupMenuOffersOnlyCleanup(t *testing.T) {
 func TestBrokenSessionDeleteSkipsDirtyConfirm(t *testing.T) {
 	ss := sample()
 	ss[0].Broken = true // sample()[0] is also dirty; broken must win
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.sessions = ss
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -321,7 +377,7 @@ func TestDeleteReportsLeftoverFilesInStatus(t *testing.T) {
 		},
 		Refresh: func() ([]session.Session, error) { return nil, nil },
 	}
-	m := New(&acts, "")
+	m := New(&acts, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: ss})
 	withMenu, _ := updated.(Model).Update(keyMsg("d"))
 	afterEnter, cmd := withMenu.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -337,7 +393,7 @@ func TestDeleteReportsLeftoverFilesInStatus(t *testing.T) {
 }
 
 func TestRefreshDoesNotLeaveProjectPicker(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateProjectPicker
 	m.projects = []projects.Project{{Name: "app"}}
 	// A periodic refresh completing must not yank the user back to the dashboard.
@@ -352,7 +408,7 @@ func TestRefreshDoesNotLeaveProjectPicker(t *testing.T) {
 }
 
 func TestRefreshDoesNotLeaveNewSessionForm(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateNewSession
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	if updated.(Model).state != stateNewSession {
@@ -361,15 +417,15 @@ func TestRefreshDoesNotLeaveNewSessionForm(t *testing.T) {
 }
 
 func TestFormSubmitReturnsToDashboard(t *testing.T) {
-	a := Actions{Create: func(projects.Project, string, string, string) error { return nil }}
-	m := New(&a, "")
+	a := Actions{Create: func(projects.Project, string, string, string, string) error { return nil }}
+	m := New(&a, "", "")
 	m.state = stateNewSession
 	m.form = newSessionForm{
 		project:     projects.Project{Name: "app", DefaultBranch: "main"},
 		sessionName: "fix",
 		branch:      "fleet/fix",
 		base:        "main",
-		field:       fieldBase,
+		field:       fieldAgent,
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if updated.(Model).state != stateDashboard {
@@ -381,7 +437,7 @@ func TestFormSubmitReturnsToDashboard(t *testing.T) {
 }
 
 func TestSpinnerTickKeepsStateAndReturnsCmd(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	m = updated.(Model)
 	next, cmd := m.Update(spinner.TickMsg{})
@@ -398,7 +454,7 @@ func TestSpinnerTickKeepsStateAndReturnsCmd(t *testing.T) {
 }
 
 func TestDashboardSpinsOnlyWorkingSessions(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	updated, _ := m.Update(sessionsUpdatedMsg{sessions: sample()})
 	out := updated.(Model).View()
 	// session "a" is Working: its detail line shows the MiniDot frame "⠋".
@@ -415,7 +471,7 @@ func TestProjectPickerHasFolderMarkers(t *testing.T) {
 	a := Actions{Projects: func() ([]projects.Project, error) {
 		return []projects.Project{{Name: "app"}, {Name: "web"}}, nil
 	}}
-	m := New(&a, "")
+	m := New(&a, "", "")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	updated, _ := m.Update(cmd())
 	out := updated.(Model).View()
@@ -425,7 +481,7 @@ func TestProjectPickerHasFolderMarkers(t *testing.T) {
 }
 
 func TestCleanupMenuHasEmojiActions(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.sessions = sample()
 	m.cursor = 0
 	m.state = stateCleanupMenu
@@ -438,7 +494,7 @@ func TestCleanupMenuHasEmojiActions(t *testing.T) {
 }
 
 func TestConfirmDialogHasWarning(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.pendingDelete = sample()[0]
 	m.state = stateConfirm
 	out := m.View()
@@ -448,7 +504,7 @@ func TestConfirmDialogHasWarning(t *testing.T) {
 }
 
 func TestNewSessionFormHasFleetTitle(t *testing.T) {
-	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	out := f.view()
 	if !strings.Contains(out, "app") {
 		t.Fatalf("form title missing project name.\n---\n%s", out)
@@ -469,7 +525,7 @@ func availableResult() selfupdate.CheckResult {
 }
 
 func TestUpdateAvailableSetsBannerState(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	next, _ := m.Update(updateAvailableMsg{res: availableResult()})
 	m = next.(Model)
 	if !m.updateAvailable || m.updateLatest != "0.2.0" {
@@ -478,7 +534,7 @@ func TestUpdateAvailableSetsBannerState(t *testing.T) {
 }
 
 func TestUpdateNotAvailableLeavesBannerOff(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	res := availableResult()
 	res.Available = false
 	next, _ := m.Update(updateAvailableMsg{res: res})
@@ -488,7 +544,7 @@ func TestUpdateNotAvailableLeavesBannerOff(t *testing.T) {
 }
 
 func TestPressingUOpensConfirmWhenAvailable(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	m.updateAvailable = true
 	m.updateRelease = selfupdate.Release{Version: "0.2.0"}
 	next, _ := m.Update(keyMsg("u"))
@@ -498,7 +554,7 @@ func TestPressingUOpensConfirmWhenAvailable(t *testing.T) {
 }
 
 func TestPressingUDoesNothingWhenNoUpdate(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	next, _ := m.Update(keyMsg("u"))
 	if next.(Model).state != stateDashboard {
 		t.Fatal("u with no update should stay on dashboard")
@@ -506,7 +562,7 @@ func TestPressingUDoesNothingWhenNoUpdate(t *testing.T) {
 }
 
 func TestUpdateConfirmCancel(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	m.updateAvailable = true
 	m.state = stateUpdateConfirm
 	next, _ := m.Update(keyMsg("n"))
@@ -516,7 +572,7 @@ func TestUpdateConfirmCancel(t *testing.T) {
 }
 
 func TestUpdateAppliedSetsStatusAndClearsBanner(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	m.updateAvailable = true
 	next, _ := m.Update(updateAppliedMsg{version: "0.2.0"})
 	m = next.(Model)
@@ -529,7 +585,7 @@ func TestUpdateAppliedSetsStatusAndClearsBanner(t *testing.T) {
 }
 
 func TestDashboardShowsUpdateBanner(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	if strings.Contains(m.View(), "update available") {
 		t.Fatal("banner should be absent when no update")
 	}
@@ -542,7 +598,7 @@ func TestDashboardShowsUpdateBanner(t *testing.T) {
 }
 
 func TestUpdateConfirmView(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	m.state = stateUpdateConfirm
 	m.updateLatest = "0.2.0"
 	out := m.View()
@@ -552,7 +608,7 @@ func TestUpdateConfirmView(t *testing.T) {
 }
 
 func TestDashboardFooterShowsReleaseVersion(t *testing.T) {
-	m := New(&Actions{}, "0.2.0")
+	m := New(&Actions{}, "0.2.0", "")
 	out := m.View()
 	if !strings.Contains(out, "q quit · v0.2.0") {
 		t.Fatalf("footer should show release version.\n---\n%s", out)
@@ -560,7 +616,7 @@ func TestDashboardFooterShowsReleaseVersion(t *testing.T) {
 }
 
 func TestDashboardFooterShowsDevVersion(t *testing.T) {
-	m := New(&Actions{}, "dev")
+	m := New(&Actions{}, "dev", "")
 	out := m.View()
 	if !strings.Contains(out, "q quit · dev") {
 		t.Fatalf("footer should show dev version.\n---\n%s", out)
@@ -571,7 +627,7 @@ func TestDashboardFooterShowsDevVersion(t *testing.T) {
 }
 
 func TestDashboardFooterOmitsEmptyVersion(t *testing.T) {
-	m := New(&Actions{}, "")
+	m := New(&Actions{}, "", "")
 	out := m.View()
 	if !strings.Contains(out, "q quit") {
 		t.Fatalf("footer keybinds missing.\n---\n%s", out)
@@ -596,9 +652,9 @@ func TestVersionLabel(t *testing.T) {
 }
 
 func TestBranchesLoadedMsgPopulatesForm(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	updated, _ := m.Update(branchesLoadedMsg{branches: git.Branches{
 		Local:  []string{"main", "feature"},
 		Remote: []string{"feature", "remote-only"},
@@ -613,9 +669,9 @@ func TestBranchesLoadedMsgPopulatesForm(t *testing.T) {
 }
 
 func TestBranchesRefreshedMsgFetchErrorSetsWarning(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	updated, _ := m.Update(branchesRefreshedMsg{fetchErr: errors.New("offline")})
 	f := updated.(Model).form
 	if f.fetchWarning == "" {
@@ -624,9 +680,9 @@ func TestBranchesRefreshedMsgFetchErrorSetsWarning(t *testing.T) {
 }
 
 func TestBranchesRefreshedMsgFetchErrorStillPopulatesBranches(t *testing.T) {
-	m := New(nil, "")
+	m := New(nil, "", "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	updated, _ := m.Update(branchesRefreshedMsg{
 		branches: git.Branches{Local: []string{"main", "feature"}, Remote: []string{"feature"}},
 		fetchErr: errors.New("offline"),
@@ -637,5 +693,24 @@ func TestBranchesRefreshedMsgFetchErrorStillPopulatesBranches(t *testing.T) {
 	}
 	if f.fetchWarning == "" {
 		t.Fatal("expected a fetch warning to also be set")
+	}
+}
+
+func TestDashboardShowsAgentPerSession(t *testing.T) {
+	m := New(nil, "", "")
+	m.sessions = []session.Session{
+		{Project: "app", Name: "one", Branch: "one", Base: "main", Agent: agent.IDOpencode,
+			Activity: activity.Idle, Git: git.Status{Dirty: true, ChangeCount: 2}},
+		// A session created before agents were selectable has no agent ID and
+		// is, in fact, running Claude Code.
+		{Project: "app", Name: "two", Branch: "two", Base: "main",
+			Activity: activity.Idle, Git: git.Status{Dirty: false}},
+	}
+	got := m.View()
+	if !strings.Contains(got, "idle · opencode · ✱2") {
+		t.Fatalf("expected the opencode session detail line:\n%s", got)
+	}
+	if !strings.Contains(got, "idle · claude · clean") {
+		t.Fatalf("expected a legacy session detail line:\n%s", got)
 	}
 }
