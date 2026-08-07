@@ -76,7 +76,9 @@ func (f *newSessionForm) syncBranchDefault() {
 	}
 }
 
-// active returns a pointer to the currently focused field's string.
+// active returns a pointer to the currently focused text field's string. The
+// agent field is an enum with no text to edit, so callers must not reach here
+// with it focused.
 func (f *newSessionForm) active() *string {
 	switch f.field {
 	case fieldSession:

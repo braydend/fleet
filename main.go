@@ -100,9 +100,8 @@ func run() error {
 		Projects: func() ([]projects.Project, error) {
 			return projects.Scan(cfg.ScanRoot, g)
 		},
-		Create: func(p projects.Project, name, branch, base string) error {
-			// Task 6 replaces this with the agent chosen in the form.
-			_, err := mgr.Create(p, name, branch, base, agent.Lookup(agent.IDClaude))
+		Create: func(p projects.Project, name, branch, base, agentID string) error {
+			_, err := mgr.Create(p, name, branch, base, agent.Lookup(agentID))
 			return err
 		},
 		Branches: func(p projects.Project) (git.Branches, error) {
@@ -165,7 +164,7 @@ func run() error {
 		},
 	}
 
-	p := tea.NewProgram(ui.New(&actions, version), tea.WithAltScreen())
+	p := tea.NewProgram(ui.New(&actions, version, cfg.DefaultAgent), tea.WithAltScreen())
 	_, err = p.Run()
 	return err
 }
