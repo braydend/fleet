@@ -699,16 +699,18 @@ func TestBranchesRefreshedMsgFetchErrorStillPopulatesBranches(t *testing.T) {
 func TestDashboardShowsAgentPerSession(t *testing.T) {
 	m := New(nil, "", "")
 	m.sessions = []session.Session{
-		{Project: "app", Name: "one", Branch: "one", Base: "main", Agent: agent.IDOpencode},
+		{Project: "app", Name: "one", Branch: "one", Base: "main", Agent: agent.IDOpencode,
+			Activity: activity.Idle, Git: git.Status{Dirty: true, ChangeCount: 2}},
 		// A session created before agents were selectable has no agent ID and
 		// is, in fact, running Claude Code.
-		{Project: "app", Name: "two", Branch: "two", Base: "main"},
+		{Project: "app", Name: "two", Branch: "two", Base: "main",
+			Activity: activity.Idle, Git: git.Status{Dirty: false}},
 	}
 	got := m.View()
-	if !strings.Contains(got, "· opencode ·") {
-		t.Fatalf("expected the opencode session labelled:\n%s", got)
+	if !strings.Contains(got, "idle · opencode · ✱2") {
+		t.Fatalf("expected the opencode session detail line:\n%s", got)
 	}
-	if !strings.Contains(got, "· claude ·") {
-		t.Fatalf("expected a legacy session labelled claude:\n%s", got)
+	if !strings.Contains(got, "idle · claude · clean") {
+		t.Fatalf("expected a legacy session detail line:\n%s", got)
 	}
 }
