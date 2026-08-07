@@ -1,7 +1,8 @@
 # fleet
 
-A terminal UI for running and managing multiple isolated [Claude Code](https://claude.com/claude-code)
-sessions at once.
+A terminal UI for running and managing multiple isolated coding-agent sessions
+at once — [Claude Code](https://claude.com/claude-code) or
+[opencode](https://opencode.ai), your choice per session.
 
 Each session runs in its own **git worktree** inside its own **tmux session**, so
 sessions are isolated from each other and from your main checkout — and they
@@ -14,7 +15,8 @@ attach to, watch, and tear down sessions across all your projects.
 
 - Pick a project from a list auto-discovered by scanning a root directory for git repos.
 - Create a session: `fleet` makes a git worktree on a new branch (you choose the
-  base and branch name) and launches `claude` inside a dedicated tmux session.
+  base and branch name, and which agent drives it) and launches that agent
+  inside a dedicated tmux session.
 - The dashboard shows each session's run state, git info (branch, dirty count,
   ahead/behind), project, worktree path, and creation time — refreshed live.
 - Attach to drop into the real interactive Claude Code terminal; detach to come back.
@@ -27,8 +29,9 @@ separate database to drift out of sync.
 
 ## Quick start
 
-You need `git`, `tmux`, and `claude` on your `PATH` (and `gh` if you want to open
-PRs from the cleanup menu).
+You need `git`, `tmux`, and at least one supported agent (`claude` and/or
+`opencode`) on your `PATH` (and `gh` if you want to open PRs from the cleanup
+menu).
 
 Install a prebuilt binary from the
 [releases page](https://github.com/braydend/fleet/releases), or build from source:

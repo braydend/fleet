@@ -1,4 +1,4 @@
-// Command fleet is a TUI for managing multiple isolated Claude Code sessions.
+// Command fleet is a TUI for managing multiple isolated coding-agent sessions.
 package main
 
 import (
@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -57,12 +58,28 @@ func main() {
 	}
 }
 
-func run() error {
-	// Dependency check.
-	for _, bin := range []string{"git", "tmux", "claude"} {
-		if _, err := exec.LookPath(bin); err != nil {
+// checkDependencies verifies the external commands fleet cannot run without.
+// Any one registered agent is enough: which agent drives a session is chosen
+// per session, and the new-session form refuses one that is not installed.
+// lookPath and agentInstalled are injectable so tests do not depend on what
+// happens to be installed on the machine running them.
+func checkDependencies(lookPath func(string) (string, error), agentInstalled func(agent.Agent) bool) error {
+	for _, bin := range []string{"git", "tmux"} {
+		if _, err := lookPath(bin); err != nil {
 			return fmt.Errorf("required command %q not found on PATH", bin)
 		}
+	}
+	for _, a := range agent.All() {
+		if agentInstalled(a) {
+			return nil
+		}
+	}
+	return fmt.Errorf("no supported agent found on PATH: install one of %s", strings.Join(agent.IDs(), ", "))
+}
+
+func run() error {
+	if err := checkDependencies(exec.LookPath, agent.Agent.Available); err != nil {
+		return err
 	}
 
 	cfgPath := config.DefaultPath()
