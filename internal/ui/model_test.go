@@ -155,7 +155,7 @@ func TestFormSubmitCallsCreate(t *testing.T) {
 }
 
 func TestBranchDefaultsToSessionName(t *testing.T) {
-	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	f.sessionName = "fix bug"
 	f.syncBranchDefault()
 	if f.branch != "fix_bug" {
@@ -168,7 +168,7 @@ func TestBranchDefaultsToSessionName(t *testing.T) {
 func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
 	m := New(nil, "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	for _, r := range "fix" {
 		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = next.(Model)
@@ -186,7 +186,7 @@ func TestBranchTracksFullSessionNameWhileTyping(t *testing.T) {
 func TestEditedBranchStopsTrackingSessionName(t *testing.T) {
 	m := New(nil, "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	m.form.field = fieldBranch
 	for _, r := range "custom" {
 		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -448,7 +448,7 @@ func TestConfirmDialogHasWarning(t *testing.T) {
 }
 
 func TestNewSessionFormHasFleetTitle(t *testing.T) {
-	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	f := newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	out := f.view()
 	if !strings.Contains(out, "app") {
 		t.Fatalf("form title missing project name.\n---\n%s", out)
@@ -598,7 +598,7 @@ func TestVersionLabel(t *testing.T) {
 func TestBranchesLoadedMsgPopulatesForm(t *testing.T) {
 	m := New(nil, "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	updated, _ := m.Update(branchesLoadedMsg{branches: git.Branches{
 		Local:  []string{"main", "feature"},
 		Remote: []string{"feature", "remote-only"},
@@ -615,7 +615,7 @@ func TestBranchesLoadedMsgPopulatesForm(t *testing.T) {
 func TestBranchesRefreshedMsgFetchErrorSetsWarning(t *testing.T) {
 	m := New(nil, "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	updated, _ := m.Update(branchesRefreshedMsg{fetchErr: errors.New("offline")})
 	f := updated.(Model).form
 	if f.fetchWarning == "" {
@@ -626,7 +626,7 @@ func TestBranchesRefreshedMsgFetchErrorSetsWarning(t *testing.T) {
 func TestBranchesRefreshedMsgFetchErrorStillPopulatesBranches(t *testing.T) {
 	m := New(nil, "")
 	m.state = stateNewSession
-	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"})
+	m.form = newForm(projects.Project{Name: "app", DefaultBranch: "main"}, "")
 	updated, _ := m.Update(branchesRefreshedMsg{
 		branches: git.Branches{Local: []string{"main", "feature"}, Remote: []string{"feature"}},
 		fetchErr: errors.New("offline"),

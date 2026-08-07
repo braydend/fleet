@@ -263,7 +263,7 @@ func (m Model) keyProjectPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		p := m.projects[m.cursor]
-		m.form = newForm(p)
+		m.form = newForm(p, "") // Task 6: m.defaultAgent
 		m.state = stateNewSession
 		m.cursor = 0
 		return m, tea.Batch(
