@@ -90,6 +90,10 @@ default_agent: claude
 - `default_agent` seeds the new-session form's agent field — `claude` (the
   default) or `opencode`. The agent is chosen per session, so this only decides
   which one the form starts on. An unrecognised value is a startup error.
+- The **agent** field starts on the last agent you used in that project (kept
+  in `<worktree_base_dir>/<project>/.fleet-agent`), falling back to
+  `default_agent`. The default is silent — the field looks and behaves exactly
+  as before, just pre-selected.
 
 ## Self-update
 
