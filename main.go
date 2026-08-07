@@ -121,9 +121,16 @@ func run() error {
 		RememberedAgent: func(p projects.Project) string {
 			return memory.Read(memory.Path(cfg.WorktreeBaseDir, p.Name))
 		},
-		Create: func(p projects.Project, name, branch, base, agentID string) error {
-			_, err := mgr.Create(p, name, branch, base, agent.Lookup(agentID))
-			return err
+		Create: func(p projects.Project, name, branch, base, agentID string) (string, error) {
+			if _, err := mgr.Create(p, name, branch, base, agent.Lookup(agentID)); err != nil {
+				return "", err
+			}
+			// Remembering the agent is best-effort: the session exists, so a
+			// failed write is a status-line notice, never a failed create.
+			if err := memory.Write(memory.Path(cfg.WorktreeBaseDir, p.Name), agentID); err != nil {
+				return fmt.Sprintf("⚠ could not remember agent for %s", p.Name), nil
+			}
+			return "", nil
 		},
 		Branches: func(p projects.Project) (git.Branches, error) {
 			return g.ListBranches(p.Path)

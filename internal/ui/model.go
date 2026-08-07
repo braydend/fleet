@@ -56,7 +56,9 @@ func cleanupOptions(s session.Session) []cleanupOption {
 type Actions struct {
 	Refresh  func() ([]session.Session, error)
 	Projects func() ([]projects.Project, error)
-	Create   func(p projects.Project, name, branch, base, agentID string) error
+	// Create makes a new session. The returned notice is a non-fatal status
+	// line message (e.g. a failed best-effort write), not an error.
+	Create func(p projects.Project, name, branch, base, agentID string) (notice string, err error)
 	// RememberedAgent returns the last agent used for a project, or "" when
 	// there is none yet. Seeded per-project, it beats the global default only
 	// when it names a known agent.
@@ -492,15 +494,19 @@ func (m Model) runThenRefresh(fn func() (string, error)) tea.Cmd {
 	}
 }
 
-// submitForm invokes Create and triggers a refresh.
+// submitForm invokes Create and triggers a refresh. Create's notice is threaded
+// into the refreshed message so a non-fatal warning lands on the status line.
 func (m Model) submitForm() tea.Cmd {
 	f := m.form
 	agentID := f.selectedAgent().ID
 	create := m.actions.Create
 	refreshFn := m.actions.Refresh
 	return func() tea.Msg {
+		var notice string
 		if create != nil {
-			if err := create(f.project, f.sessionName, f.branch, f.base, agentID); err != nil {
+			var err error
+			notice, err = create(f.project, f.sessionName, f.branch, f.base, agentID)
+			if err != nil {
 				return errorMsg{err: err}
 			}
 		}
@@ -509,8 +515,8 @@ func (m Model) submitForm() tea.Cmd {
 			if err != nil {
 				return errorMsg{err: err}
 			}
-			return sessionsUpdatedMsg{sessions: ss}
+			return sessionsUpdatedMsg{sessions: ss, notice: notice}
 		}
-		return sessionsUpdatedMsg{}
+		return sessionsUpdatedMsg{notice: notice}
 	}
 }
