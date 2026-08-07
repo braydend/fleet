@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0](https://github.com/braydend/fleet/compare/v0.7.0...v0.8.0) (2026-08-07)
+
+
+### Features
+
+* **memory:** persist the last agent used per project ([be0bf3b](https://github.com/braydend/fleet/commit/be0bf3b9a33b034e6a5836e21f02703f8093ecab))
+* remember the agent used per project ([2fe6c38](https://github.com/braydend/fleet/commit/2fe6c387c052548732ecb63e558812e6958e1fc0))
+* **ui:** default the agent field to the last agent used in the project ([dd15daf](https://github.com/braydend/fleet/commit/dd15daf11adbd9ac76972a0b8965374d80167e61))
+* **ui:** remember the session's agent for its project on create ([46748aa](https://github.com/braydend/fleet/commit/46748aaf7f089c4a432c78aa2f538885c1b9820f))
+
 ## [0.7.0](https://github.com/braydend/fleet/compare/v0.6.0...v0.7.0) (2026-08-07)
 
 
