@@ -55,7 +55,10 @@ In short: `go build ./...`, `go test ./...`, `go run .` (needs `git`, `tmux`,
   `fleet-<project>-<session>` running `claude` in its worktree.
   Which agent a window runs — Claude Code or opencode — is chosen per session in
   the new-session form and recorded in `.fleet/meta.json`; sessions created
-  before that existed have no recorded agent and run Claude Code. Windows act as
+  before that existed have no recorded agent and run Claude Code. The new-session
+  form defaults its agent field to the last agent used in that project (a
+  per-project `.fleet-agent` file beside the worktrees), falling back to the
+  configured `default_agent`. Windows act as
   tabs — switch with Alt-1..9 / Alt-←/→ while attached. Per-session activity
   (working / waiting / idle / exited) is derived from tmux's window-activity
   timestamp plus a best-effort capture-pane prompt match (`internal/activity`).
@@ -86,6 +89,8 @@ sit behind interfaces so domain logic can be unit-tested with fakes.
 - `tmux` — adapter over the tmux CLI (list/create/kill/attach/liveness).
 - `git` — worktree + branch ops, status queries, push, `gh` PR open.
 - `meta` — read/write per-worktree `.fleet/meta.json`.
+- `memory` — per-project agent memory (last agent used per project), read to
+  seed the new-session form and written on create.
 - `session` — domain model (create / attach / tear down).
 - `refresher` — rebuild live session list on tick + on demand.
 - `ui` — Bubble Tea views (project picker, dashboard, new-session form,
