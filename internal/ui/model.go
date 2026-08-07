@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bray/fleet/internal/agent"
 	"github.com/bray/fleet/internal/git"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/selfupdate"
@@ -53,17 +54,21 @@ func cleanupOptions(s session.Session) []cleanupOption {
 
 // Actions the model needs from the rest of the app, injected for testability.
 type Actions struct {
-	Refresh       func() ([]session.Session, error)
-	Projects      func() ([]projects.Project, error)
-	Create        func(p projects.Project, name, branch, base, agentID string) error
-	Branches      func(p projects.Project) (git.Branches, error)
-	FetchBranches func(p projects.Project) (git.Branches, error)
-	Delete        func(s session.Session, deleteBranch bool) (session.DeleteResult, error)
-	Leave         func(s session.Session) error
-	PushPR        func(s session.Session) error
-	Attach        func(s session.Session) tea.Cmd
-	CheckUpdate   func() (selfupdate.CheckResult, error)
-	ApplyUpdate   func(selfupdate.Release) error
+	Refresh  func() ([]session.Session, error)
+	Projects func() ([]projects.Project, error)
+	Create   func(p projects.Project, name, branch, base, agentID string) error
+	// RememberedAgent returns the last agent used for a project, or "" when
+	// there is none yet. Seeded per-project, it beats the global default only
+	// when it names a known agent.
+	RememberedAgent func(p projects.Project) string
+	Branches        func(p projects.Project) (git.Branches, error)
+	FetchBranches   func(p projects.Project) (git.Branches, error)
+	Delete          func(s session.Session, deleteBranch bool) (session.DeleteResult, error)
+	Leave           func(s session.Session) error
+	PushPR          func(s session.Session) error
+	Attach          func(s session.Session) tea.Cmd
+	CheckUpdate     func() (selfupdate.CheckResult, error)
+	ApplyUpdate     func(selfupdate.Release) error
 }
 
 // Model is the root Bubble Tea model.
@@ -268,7 +273,13 @@ func (m Model) keyProjectPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		p := m.projects[m.cursor]
-		m.form = newForm(p, m.defaultAgent)
+		seed := m.defaultAgent
+		if m.actions.RememberedAgent != nil {
+			if remembered := m.actions.RememberedAgent(p); remembered != "" && agent.Known(remembered) {
+				seed = remembered
+			}
+		}
+		m.form = newForm(p, seed)
 		m.state = stateNewSession
 		m.cursor = 0
 		return m, tea.Batch(

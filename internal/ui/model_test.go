@@ -714,3 +714,51 @@ func TestDashboardShowsAgentPerSession(t *testing.T) {
 		t.Fatalf("expected a legacy session detail line:\n%s", got)
 	}
 }
+
+func TestFormSeedsRememberedAgent(t *testing.T) {
+	a := Actions{RememberedAgent: func(projects.Project) string { return agent.IDOpencode }}
+	m := New(&a, "", agent.IDClaude)
+	m.state = stateProjectPicker
+	m.projects = []projects.Project{{Name: "app", DefaultBranch: "main"}}
+	m.cursor = 0
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f := updated.(Model).form
+	if got := f.selectedAgent().ID; got != agent.IDOpencode {
+		t.Fatalf("seeded agent = %q, want %q", got, agent.IDOpencode)
+	}
+}
+
+func TestFormFallsBackToDefaultWhenNoMemory(t *testing.T) {
+	a := Actions{RememberedAgent: func(projects.Project) string { return "" }}
+	m := New(&a, "", agent.IDOpencode)
+	m.state = stateProjectPicker
+	m.projects = []projects.Project{{Name: "app", DefaultBranch: "main"}}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f := updated.(Model).form
+	if got := f.selectedAgent().ID; got != agent.IDOpencode {
+		t.Fatalf("seeded agent = %q, want default %q", got, agent.IDOpencode)
+	}
+}
+
+func TestFormIgnoresUnknownRememberedAgent(t *testing.T) {
+	a := Actions{RememberedAgent: func(projects.Project) string { return "nonsense" }}
+	m := New(&a, "", agent.IDClaude)
+	m.state = stateProjectPicker
+	m.projects = []projects.Project{{Name: "app", DefaultBranch: "main"}}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f := updated.(Model).form
+	if got := f.selectedAgent().ID; got != agent.IDClaude {
+		t.Fatalf("seeded agent = %q, want fallback %q", got, agent.IDClaude)
+	}
+}
+
+func TestNilRememberedAgentIsSafe(t *testing.T) {
+	m := New(nil, "", agent.IDClaude)
+	m.state = stateProjectPicker
+	m.projects = []projects.Project{{Name: "app", DefaultBranch: "main"}}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	f := updated.(Model).form
+	if got := f.selectedAgent().ID; got != agent.IDClaude {
+		t.Fatalf("seeded agent = %q, want default %q", got, agent.IDClaude)
+	}
+}

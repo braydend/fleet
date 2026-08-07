@@ -15,6 +15,7 @@ import (
 	"github.com/bray/fleet/internal/config"
 	"github.com/bray/fleet/internal/forge"
 	"github.com/bray/fleet/internal/git"
+	"github.com/bray/fleet/internal/memory"
 	"github.com/bray/fleet/internal/projects"
 	"github.com/bray/fleet/internal/refresher"
 	"github.com/bray/fleet/internal/selfupdate"
@@ -116,6 +117,9 @@ func run() error {
 		},
 		Projects: func() ([]projects.Project, error) {
 			return projects.Scan(cfg.ScanRoot, g)
+		},
+		RememberedAgent: func(p projects.Project) string {
+			return memory.Read(memory.Path(cfg.WorktreeBaseDir, p.Name))
 		},
 		Create: func(p projects.Project, name, branch, base, agentID string) error {
 			_, err := mgr.Create(p, name, branch, base, agent.Lookup(agentID))
