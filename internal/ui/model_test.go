@@ -695,3 +695,20 @@ func TestBranchesRefreshedMsgFetchErrorStillPopulatesBranches(t *testing.T) {
 		t.Fatal("expected a fetch warning to also be set")
 	}
 }
+
+func TestDashboardShowsAgentPerSession(t *testing.T) {
+	m := New(nil, "", "")
+	m.sessions = []session.Session{
+		{Project: "app", Name: "one", Branch: "one", Base: "main", Agent: agent.IDOpencode},
+		// A session created before agents were selectable has no agent ID and
+		// is, in fact, running Claude Code.
+		{Project: "app", Name: "two", Branch: "two", Base: "main"},
+	}
+	got := m.View()
+	if !strings.Contains(got, "· opencode ·") {
+		t.Fatalf("expected the opencode session labelled:\n%s", got)
+	}
+	if !strings.Contains(got, "· claude ·") {
+		t.Fatalf("expected a legacy session labelled claude:\n%s", got)
+	}
+}

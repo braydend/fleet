@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bray/fleet/internal/activity"
+	"github.com/bray/fleet/internal/agent"
 )
 
 // versionLabel formats the build version for display. A dev/local build shows
@@ -95,6 +96,9 @@ func (m Model) viewDashboard() string {
 			detail += m.spinner.View() + " "
 		}
 		detail += s.Activity.Label()
+		// Which agent drives the session is not inferable from anything else on
+		// the row, and a legacy session with no stored ID is running Claude.
+		detail += " · " + agent.Lookup(s.Agent).Label
 		if s.Git.Dirty {
 			detail += fmt.Sprintf(" · ✱%d", s.Git.ChangeCount)
 		} else {
