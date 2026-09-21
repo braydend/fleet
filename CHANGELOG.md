@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/braydend/fleet/compare/v0.8.0...v0.9.0) (2026-09-21)
+
+
+### Features
+
+* fork new session branches from the remote base ([843ac5a](https://github.com/braydend/fleet/commit/843ac5afdc8903926480c513ae43d03c9842a2fa))
+* **session:** fork new session branches from the remote base ([4013b9e](https://github.com/braydend/fleet/commit/4013b9e9d952e90e8396228938eb191f0a58b92b))
+* **ui:** hint that new branches fork from the remote base ([865f9e2](https://github.com/braydend/fleet/commit/865f9e2d769939e55d74a2e708a2b75b011dd6f1))
+
+
+### Bug Fixes
+
+* **git:** keep new session branches from silently tracking origin ([9e9ea4e](https://github.com/braydend/fleet/commit/9e9ea4eb9e27ec41f773c88ddbf2fb8d2a1612ec))
+
 ## [0.8.0](https://github.com/braydend/fleet/compare/v0.7.0...v0.8.0) (2026-08-07)
 
 
