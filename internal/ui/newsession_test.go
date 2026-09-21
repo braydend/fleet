@@ -16,6 +16,26 @@ func TestBranchHintNewBranch(t *testing.T) {
 	}
 }
 
+// When the base exists on the remote, the hint must say the branch will fork
+// from origin/<base>, matching what Manager.Create does.
+func TestBranchHintNewBranchPrefersRemoteBase(t *testing.T) {
+	f := newForm(projects.Project{DefaultBranch: "main"}, "")
+	f.remoteBranches = []string{"main"}
+	f.branch = "brand-new"
+	if got := f.branchHint(); got != "new branch from origin/main" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// No remote ref for the base → the plain local-base wording, as before.
+func TestBranchHintNewBranchFallsBackToLocalBase(t *testing.T) {
+	f := newForm(projects.Project{DefaultBranch: "main"}, "")
+	f.branch = "brand-new"
+	if got := f.branchHint(); got != "new branch from main" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestBranchHintExistingLocal(t *testing.T) {
 	f := newForm(projects.Project{DefaultBranch: "main"}, "")
 	f.localBranches = []string{"main", "feature"}
