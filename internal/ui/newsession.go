@@ -112,6 +112,9 @@ func (f newSessionForm) branchHint() string {
 	if containsStr(f.remoteBranches, f.branch) {
 		return "tracks origin/" + f.branch + " — base ignored"
 	}
+	if containsStr(f.remoteBranches, f.base) {
+		return "new branch from origin/" + f.base
+	}
 	return "new branch from " + f.base
 }
 

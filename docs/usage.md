@@ -141,7 +141,9 @@ in and the key to detach and return to the dashboard (`<prefix> d`, e.g.
 **New-session form**: `Tab`/`Shift-Tab` (or `↑`/`↓`) to move between fields, type
 to edit, `←`/`→` to change the agent, `Enter` to advance / submit on the last
 field, `Esc` to cancel. The branch defaults to the sanitized session name and the
-base to the project's default branch.
+base to the project's default branch. New branches fork from the latest fetched
+remote base (`origin/<base>`) when it exists, falling back to the local ref;
+fleet never rewrites the repo's local branches.
 
 The **agent** field chooses what drives the session: `claude` (Claude Code) or
 `opencode`. An agent whose binary is not on your `PATH` shows as

@@ -124,6 +124,16 @@ func (m *Manager) addWorktreeForBranch(repoPath, wt, branch, base string) error 
 	if remote {
 		return m.git.AddWorktreeTracking(repoPath, wt, branch)
 	}
+	// New branch: prefer origin/<base> so the session never forks from a stale
+	// local base branch; fall back to the local ref when no remote-tracking ref
+	// exists (a local-only base, or a repo with no origin).
+	if base != "" {
+		if rb, err := m.git.RemoteBranchExists(repoPath, base); err != nil {
+			return err
+		} else if rb {
+			return m.git.AddWorktree(repoPath, wt, branch, "origin/"+base)
+		}
+	}
 	return m.git.AddWorktree(repoPath, wt, branch, base)
 }
 

@@ -301,3 +301,27 @@ func TestAddWorktreeTrackingCreatesLocalFromRemote(t *testing.T) {
 		t.Fatal("expected local feature branch created")
 	}
 }
+
+// A branch forked from a remote-tracking base must not silently gain an
+// upstream: git's autoSetupMerge would otherwise make it track origin/<base>,
+// changing the dashboard's ahead/behind display and delete-confirm behaviour.
+func TestAddWorktreeFromRemoteBaseDoesNotTrack(t *testing.T) {
+	repo := repoWithRemoteFeature(t)
+	g := New()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := g.AddWorktree(repo, wt, "fleet/new", "origin/feature"); err != nil {
+		t.Fatalf("add worktree: %v", err)
+	}
+	if ok, _ := g.RemoteBranchExists(repo, "fleet/new"); ok {
+		t.Fatal("precondition: the branch is local, not remote-only")
+	}
+	out, err := g.git(wt, "branch", "-vv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "fleet/new") && strings.Contains(line, "[origin/") {
+			t.Fatalf("new branch must not track origin: %s", line)
+		}
+	}
+}

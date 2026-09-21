@@ -27,13 +27,19 @@ type fakeGit struct {
 	status        git.Status
 	localExists   map[string]bool
 	remoteExists  map[string]bool
+	addedBases    []string // base argument passed to AddWorktree
+	remoteErrOn   string   // branch name whose RemoteBranchExists check should error
 	addedExisting []string
 	addedTracking []string
 	existingErr   error // returned by AddWorktreeExisting when set
 }
 
 func (f *fakeGit) DefaultBranch(string) (string, error) { return "main", nil }
-func (f *fakeGit) AddWorktree(_, wt, _, _ string) error { f.added = append(f.added, wt); return nil }
+func (f *fakeGit) AddWorktree(_, wt, _, base string) error {
+	f.added = append(f.added, wt)
+	f.addedBases = append(f.addedBases, base)
+	return nil
+}
 func (f *fakeGit) PruneWorktrees(repo string) error {
 	f.pruned = append(f.pruned, repo)
 	return nil
@@ -43,14 +49,19 @@ func (f *fakeGit) DeleteBranch(_, b string, _ bool) error {
 	f.deleted = append(f.deleted, b)
 	return nil
 }
-func (f *fakeGit) Status(string) (git.Status, error)            { return f.status, nil }
-func (f *fakeGit) Push(string, string) error                    { return nil }
-func (f *fakeGit) IsRepo(string) bool                           { return true }
-func (f *fakeGit) Ignore(string, string) error                  { return nil }
-func (f *fakeGit) LocalBranchExists(_, b string) (bool, error)  { return f.localExists[b], nil }
-func (f *fakeGit) RemoteBranchExists(_, b string) (bool, error) { return f.remoteExists[b], nil }
-func (f *fakeGit) ListBranches(string) (git.Branches, error)    { return git.Branches{}, nil }
-func (f *fakeGit) Fetch(string) error                           { return nil }
+func (f *fakeGit) Status(string) (git.Status, error)           { return f.status, nil }
+func (f *fakeGit) Push(string, string) error                   { return nil }
+func (f *fakeGit) IsRepo(string) bool                          { return true }
+func (f *fakeGit) Ignore(string, string) error                 { return nil }
+func (f *fakeGit) LocalBranchExists(_, b string) (bool, error) { return f.localExists[b], nil }
+func (f *fakeGit) RemoteBranchExists(_, b string) (bool, error) {
+	if f.remoteErrOn != "" && b == f.remoteErrOn {
+		return false, errors.New("git show-ref " + b + ": boom")
+	}
+	return f.remoteExists[b], nil
+}
+func (f *fakeGit) ListBranches(string) (git.Branches, error) { return git.Branches{}, nil }
+func (f *fakeGit) Fetch(string) error                        { return nil }
 func (f *fakeGit) AddWorktreeExisting(_, wt, _ string) error {
 	if f.existingErr != nil {
 		return f.existingErr
@@ -390,6 +401,46 @@ func TestCreateNewBranchWhenNeitherExists(t *testing.T) {
 	}
 	if len(fg.addedExisting) != 0 || len(fg.addedTracking) != 0 {
 		t.Fatalf("wrong worktree path taken: %+v", fg)
+	}
+}
+
+// A brand-new branch must fork from origin/<base>, not a stale local base.
+func TestCreateNewBranchPrefersRemoteBase(t *testing.T) {
+	fg := &fakeGit{remoteExists: map[string]bool{"main": true}}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "brand-new", "main", agent.Lookup(agent.IDClaude)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.addedBases) != 1 || fg.addedBases[0] != "origin/main" {
+		t.Fatalf("expected AddWorktree with origin/main, got %v", fg.addedBases)
+	}
+	if len(fg.addedTracking) != 0 {
+		t.Fatalf("a new branch must not take the tracking path: %v", fg.addedTracking)
+	}
+}
+
+// No remote-tracking ref for the base → fork from the local ref as before.
+func TestCreateNewBranchFallsBackToLocalBase(t *testing.T) {
+	fg := &fakeGit{}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "brand-new", "main", agent.Lookup(agent.IDClaude)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(fg.addedBases) != 1 || fg.addedBases[0] != "main" {
+		t.Fatalf("expected AddWorktree with plain base, got %v", fg.addedBases)
+	}
+}
+
+// A real error from the base-ref check must abort creation, like the other
+// existence checks do.
+func TestCreateNewBranchRemoteBaseCheckErrorPropagates(t *testing.T) {
+	fg := &fakeGit{remoteErrOn: "main"}
+	m, _ := newManager(t, fg, &fakeTmux{})
+	proj := projects.Project{Name: "App", Path: "/code/app", DefaultBranch: "main"}
+	if _, err := m.Create(proj, "sess", "brand-new", "main", agent.Lookup(agent.IDClaude)); err == nil {
+		t.Fatal("expected a RemoteBranchExists error to abort creation")
 	}
 }
 
