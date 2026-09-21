@@ -74,8 +74,11 @@ func (c *CLI) DefaultBranch(repoPath string) (string, error) {
 	return c.git(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
 }
 
+// AddWorktree creates a new branch from base in a new worktree. --no-track
+// keeps the branch upstream-free even when base is a remote-tracking ref, so a
+// session branch never shows ahead/behind or gains an upstream until pushed.
 func (c *CLI) AddWorktree(repoPath, worktreePath, branch, base string) error {
-	_, err := c.git(repoPath, "worktree", "add", "-b", branch, worktreePath, base)
+	_, err := c.git(repoPath, "worktree", "add", "--no-track", "-b", branch, worktreePath, base)
 	return err
 }
 

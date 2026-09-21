@@ -98,9 +98,12 @@ if base != "" {
 return m.git.AddWorktree(repoPath, wt, branch, base)
 ```
 
-- **No git adapter change.** `RemoteBranchExists` (checks
-  `refs/remotes/origin/<base>`) and `AddWorktree` already exist;
-  `origin/<base>` is a valid base argument to `git worktree add -b`.
+- **One adapter flag.** `origin/<base>` is a valid base argument to
+  `git worktree add -b`; `AddWorktree` gains `--no-track` so the new branch does
+  not silently track the remote ref (git's `branch.autoSetupMerge` would
+  otherwise attach an upstream, changing the dashboard's ahead/behind display
+  and the delete-confirm behaviour for brand-new session branches). The `Git`
+  interface is unchanged.
 - **Error handling** matches the existing existence checks: a real
   `RemoteBranchExists` error (exit > 1 from `show-ref`) propagates; "ref not
   found" (exit 1) is the false → fallback path.
